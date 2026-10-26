@@ -21,12 +21,12 @@ just-doc --guide           # how a coding assistant reviews a document with you
 With [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv tool install git+https://github.com/klemengit/just-doc
+uv tool install git+https://github.com/ladisk/just-doc
 ```
 
-or with pipx: `pipx install git+https://github.com/klemengit/just-doc`.
+or with pipx: `pipx install git+https://github.com/ladisk/just-doc`.
 
-To try it without installing: `uvx --from git+https://github.com/klemengit/just-doc just-doc book.pdf`.
+To try it without installing: `uvx --from git+https://github.com/ladisk/just-doc just-doc book.pdf`.
 
 Needs Python 3.9 or newer; the only dependency is `pypdf`, used for the export. The window is a Chromium, Brave or
 Chrome app window if one is installed, otherwise a tab in the default browser.

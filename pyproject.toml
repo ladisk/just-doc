@@ -10,7 +10,7 @@ dependencies = ["pypdf>=4"]
 just-doc = "just_doc:main"
 
 [project.urls]
-Repository = "https://github.com/klemengit/just-doc"
+Repository = "https://github.com/ladisk/just-doc"
 
 [build-system]
 requires = ["hatchling"]

@@ -452,6 +452,7 @@ class Tabs:
         self.handed = {}     # id -> how often Ctrl+Enter was pressed in the document
         self.taken = {}      # id -> how many of those a --wait has seen
         self.waiting = {}    # id -> the --wait commands that are waiting now
+        self.left = {}       # id -> when the last --wait stopped waiting (time.monotonic)
         self.stamp = {}      # id -> the time of the last change of the file that the window knows of
         self.logs = {}       # id -> the file of its repository that changes with every commit, and its time
         self.quit = False    # set by the q key: the windows close and just-doc stops
@@ -492,6 +493,10 @@ class Tabs:
         """Wait for a Ctrl+Enter that no --wait has seen yet; False when none came in time."""
         end = time.monotonic() + seconds
         with self.changed:
+            if not self.listens(key):
+                # the window shows that the assistant waits
+                self.version += 1
+                self.changed.notify_all()
             self.waiting[key] = self.waiting.get(key, 0) + 1
             try:
                 while self.handed.get(key, 0) <= self.taken.get(key, 0):
@@ -503,6 +508,11 @@ class Tabs:
                 return True
             finally:
                 self.waiting[key] -= 1
+                self.left[key] = time.monotonic()
+
+    def listens(self, key):
+        """Whether a --wait waits for the document; it asks again every 25 s, so a short gap counts too."""
+        return self.waiting.get(key, 0) > 0 or time.monotonic() - self.left.get(key, -10) < 3
 
     def listing(self):
         tabs = []
@@ -516,7 +526,7 @@ class Tabs:
                 self.stamp[key] = changed
             self.committed(key, doc)
             tabs.append({"id": key, "name": doc.name, "path": str(doc), "rev": self.rev.get(key, 0),
-                         "file": self.stamp[key]})
+                         "file": self.stamp[key], "waiting": self.listens(key)})
         return {"tabs": tabs, "focus": self.focus, "opened": self.opened, "quit": self.quit}
 
     def committed(self, key, doc):

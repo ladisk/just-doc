@@ -36,7 +36,8 @@
   body.past #past { display: inline-block; }
   body.past #bar { background: #6a3fa0; }
   #news { display: none; border-radius: 10px; padding: 1px 10px; font-weight: 700; background: #555; color: #ddd; }
-  #news.wait, #news.new { display: inline-block; }
+  #news.wait, #news.new, #news.agent { display: inline-block; }
+  #news.agent { background: #1f7a3a; color: #fff; }
   #news.new { background: #2f7bff; color: #fff; }
   .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
   #pages { padding: calc(var(--bar) + 10px) var(--side) 34px 0; box-sizing: border-box; display: flex; flex-direction: column;
@@ -1347,12 +1348,18 @@ function showNews() {
   // with the changes marked, n goes through them too
   const n = state.changes ? reviewItems().filter(it => !itemSeen(it)).length : replies;
   if (replies) store.set('waiting', false);
+  // a just-doc --wait that waits for this document: the assistant is done and it is your turn
+  const agent = !AT && window.parent.tabWaiting?.(DOC);
   const el = $('news');
-  el.className = n ? 'new' : store.get('waiting', false) ? 'wait' : '';
-  el.textContent = n ? (state.changes ? `${n} to look at · n` : `${n} new ${n > 1 ? 'replies' : 'reply'} · n`) : 'handed over, waiting for replies …';
+  el.className = n ? 'new' : agent ? 'agent' : store.get('waiting', false) ? 'wait' : '';
+  el.textContent = n ? (state.changes ? `${n} to look at · n` : `${n} new ${n > 1 ? 'replies' : 'reply'} · n`)
+    : agent ? 'the assistant waits for your comments · Ctrl+Enter' : 'handed over, waiting for replies …';
   for (const it of $('list').querySelectorAll('.it[data-id]')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
   if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n);
 }
+
+// the window calls it when a just-doc --wait starts or stops waiting
+window.showNews = () => showNews();
 
 function markSeen(id) {
   const a = state.annots.find(x => x.id === id);
@@ -1612,13 +1619,16 @@ async function handOver() {
   drawList();
   try {
     const j = await (await fetch(api('/api/done'), { method: 'POST' })).json();
-    store.set('waiting', true);
+    // open: a comment that waits for an answer, as --wait counts it
+    const open = state.annots.filter(a => !a.done && !lastFrom(a)).length;
+    store.set('waiting', open > 0);
     // a new round: the changes are counted from now on
     await loadRounds();
     drawList();
     if (state.changes?.kind === 'handed') await showChanges('handed', true);
     showNews();
-    toast(j.listening ? `Handed over ${state.annots.length} comment(s)` : 'Handed over, but nobody is waiting yet: start just-doc with --wait');
+    toast(!j.listening ? 'Handed over, but nobody is waiting yet: start just-doc with --wait'
+          : open ? `Handed over ${open} open comment(s)` : 'Handed over, but no comment is open: nothing to answer');
   } catch { toast('Not handed over: the server is not responding', true); }
 }
 

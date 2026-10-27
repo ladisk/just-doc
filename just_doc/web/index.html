@@ -39,7 +39,6 @@
   #news.wait, #news.new { display: inline-block; }
   #news.new { background: #2f7bff; color: #fff; }
   .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
-  .it.new .p::after { content: ' · new reply'; color: #0050d0; font-weight: 700; }
   #pages { padding: calc(var(--bar) + 10px) var(--side) 34px 0; box-sizing: border-box; display: flex; flex-direction: column;
            align-items: center; gap: 12px; min-width: max-content; }
   .pg { position: relative; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); flex: none; }
@@ -68,8 +67,18 @@
   #side h1 { font-size: 12px; margin: 0; padding: 5px 10px; background: #e4e4e0; position: sticky; top: 0; }
   .it { padding: 5px 10px; border-bottom: 1px solid #ddd; cursor: pointer; }
   .it:hover { background: #eaeae6; }
-  .it.on { background: #ffe9e0; box-shadow: inset 3px 0 0 #d00000; }
-  .it .p { color: #777; font-size: 11px; }
+  .it.on { background: #ffe9e0; box-shadow: inset 4px 0 0 #d00000; outline: 2px solid #d00000; outline-offset: -2px; }
+  .it .l1 { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; color: #777; font-size: 11px; }
+  .it .l1 .qq { overflow: hidden; text-overflow: ellipsis; min-width: 0; color: #555; font-style: italic; font-size: 12px; }
+  .it .st { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 700; background: #e4e4e0; color: #666; }
+  .it .st.new { background: #2f7bff; color: #fff; }
+  .it .st.read { background: #dbe7ff; color: #0050d0; }
+  .it .st.wait { background: #ffe0b0; color: #7a4300; }
+  .it .st.done { background: #c9f2c9; color: #14601f; }
+  .it .l2 { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it .l2 b { color: #0050d0; }
+  .it .l2.me b { color: #777; }
+  .it:not(.open) .q, .it:not(.open) .c, .it:not(.open) .r, .it.open .l2, .it.open .qq { display: none; }
   .it .q { color: #555; font-style: italic; display: -webkit-box; -webkit-line-clamp: 3;
            -webkit-box-orient: vertical; overflow: hidden; }
   .it .q.strike { text-decoration: line-through; text-decoration-color: #d00000; }
@@ -208,7 +217,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
@@ -220,6 +229,7 @@
     <tr><td><kbd>a</kbd></td><td>comment on the selected text (or edit the comment of the selected mark; once it is answered: reply)</td></tr>
     <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
     <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next / previous comment answered since the last hand-over, or change, from where you are; a card shows the reply, your comment and the change</td></tr>
+    <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
     <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
@@ -290,7 +300,9 @@ const store = {
 };
 
 const state = { scale: store.get('scale', 1.5), annots: [], sel: null, undo: [], editing: null,
-                mode: 'normal', cursor: null, anchor: null, pieces: null, pending: '', count: '', wantX: null, find: null, tocAt: 0, single: 0, scaleBefore: 0, cursorTo: null, back: [], fwd: [] };
+                mode: 'normal', cursor: null, anchor: null, pieces: null, pending: '', count: '', wantX: null, find: null, tocAt: 0, single: 0, scaleBefore: 0, cursorTo: null, back: [], fwd: [],
+                // the list: all rows open (zR), rows opened or closed one by one (za), the selected row closed
+                allOpen: false, flip: new Set(), selFolded: false };
 const dpr = window.devicePixelRatio || 1;
 const pagesEl = $('pages');
 const pgs = [];        // 1-based: page element
@@ -575,6 +587,28 @@ let filed = store.get('filed', []);
 const listedNow = a => !(a.done && filed.includes(a.id)) || isNew(a);
 const listed = a => listedNow(a) || state.archive || a.id === state.sel;
 
+// where a comment stands, for the mark on its row: [class, word]
+function standing(a) {
+  if (isNew(a)) return ['new', lastFrom(a) ? 'new reply' : 'new: done'];
+  if (a.done) return ['done', 'done ✓'];
+  if (lastFrom(a)) return ['read', 'answered'];
+  return !rounds.length || Date.parse(a.created) > roundStart() ? ['draft', 'not handed over'] : ['wait', 'waiting'];
+}
+
+// whether the row of a comment is open; the selected one is, unless it was closed with za
+const unfolded = a => a.id === state.sel ? !state.selFolded : state.allOpen !== state.flip.has(a.id);
+
+// za: open or close the row of the comment at hand; zR / zM: open / close all rows
+function fold(all) {
+  if (all) { state.allOpen = all === 'R'; state.flip.clear(); state.selFolded = !state.allOpen; drawList(); return; }
+  const id = target();
+  if (!id) { hint('go to a comment first (n)'); return; }
+  if (id === state.sel) state.selFolded = !state.selFolded;
+  else if (!state.flip.delete(id)) state.flip.add(id);
+  drawList();
+  $('list').querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
 function drawList() {
   const shown = state.annots.filter(listed), hidden = state.annots.length - shown.length;
   $('count').textContent = state.annots.filter(a => !a.done).length;
@@ -593,9 +627,16 @@ function drawList() {
     if (g !== last && g) list.append(span('div', TITLE[g], 'grp' + (g === 4 ? ' old' : '')));
     last = g;
     const it = document.createElement('div');
-    it.className = 'it' + (a.id === state.sel ? ' on' : '') + (a.done ? ' done' : '') + (last === 4 ? ' old' : '');
+    it.className = 'it' + (a.id === state.sel ? ' on' : '') + (a.done ? ' done' : '') + (last === 4 ? ' old' : '') + (unfolded(a) ? ' open' : '');
     it.dataset.id = a.id;
-    const p = document.createElement('div'); p.className = 'p'; p.textContent = 'p. ' + a.rects[0].p + (a.done ? ' · done ✓' : '') + (a.lost ? ' · text not found' : '');
+    // a closed row is two lines: where the comment stands, its page and text; and who spoke last
+    const [key, word] = standing(a), quote = (a.text || a.change || '').replace(/\s+/g, ' ');
+    const l1 = document.createElement('div'); l1.className = 'l1';
+    l1.append(span('span', word, 'st ' + key), 'p. ' + a.rects[0].p + (a.lost ? ' · text not found' : ''));
+    if (quote) l1.append(span('span', (a.kind === 'strike' ? '✕ ' : '') + '«' + quote + '»', 'qq'));
+    const r = (a.replies || []).at(-1), l2 = document.createElement('div');
+    l2.className = 'l2' + (r?.from ? '' : ' me');
+    l2.append(span('b', (r?.from || 'you') + ': '), r ? r.text : a.comment || (a.kind === 'strike' ? '(delete)' : '(no comment)'));
     const q = document.createElement('div'); q.className = 'q' + (a.kind === 'strike' ? ' strike' : ''); q.textContent = (a.kind === 'box' ? '▭ ' : '') + (a.text ? '«' + a.text.replace(/\s+/g, ' ') + '»' : '(area without text)');
     if (a.was !== undefined || a.change !== undefined) {
       // the text as it was, and what stands there now; a comment on a change shows the change
@@ -607,7 +648,7 @@ function drawList() {
     }
     const c = document.createElement('div'); c.className = 'c' + (a.comment ? '' : ' none');
     c.textContent = a.comment || (a.kind === 'strike' ? '(delete)' : '(no comment)');
-    it.append(p, q, c);
+    it.append(l1, l2, q, c);
     for (const r of a.replies || []) {
       const d = document.createElement('div'); d.className = 'r' + (r.from ? '' : ' mine');
       if (r.from) { const b = document.createElement('b'); b.textContent = r.from + ' '; d.append(b); }
@@ -1242,6 +1283,7 @@ function markSeen(id) {
 }
 
 function select(id) {
+  if (id !== state.sel) state.selFolded = false;
   state.sel = id;
   // the card of gn goes when something else is selected
   if (state.item && !(id && state.item.a?.id === id)) { state.item = null; showCard(); }
@@ -1392,7 +1434,7 @@ function addFromSelection(kind) {
   return a;
 }
 
-// the comment that a and A act on: the selected one, the one of the card, or the one under the cursor
+// the comment that a, A and za act on: the selected one, the one of the card, or the one under the cursor
 function target() {
   const it = state.item;
   if (state.sel || it?.a || it?.near) return state.sel || (it.a || it.near).id;
@@ -2543,6 +2585,8 @@ function handleKey(e) {
     state.pending = '';
     hint('');
     if (k === 't' || k === 'z' || k === 'b') scrollCursorTo(k);
+    else if (k === 'a') fold();
+    else if (k === 'R' || k === 'M') fold(k);
     return;
   }
   if (k === 'z') {

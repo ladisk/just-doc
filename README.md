@@ -60,6 +60,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `h` `j` `k` `l`, `w` `b` `e`, `0` `$` | move the cursor (see below); the page follows it |
 | `↓` / `↑` | move the cursor a line down / up, as `j` / `k` do; also in a selection |
 | `f` / `F` + a character | move the cursor to that character after / before it on the line (`fa`, `3fa`); the wait for the character ends after 1.5 s |
+| `;` / `,` | repeat the last `f` or `F` / repeat it the other way |
 | `gg` / `G` | go to the top / bottom of the document, with the cursor on the first word / the last line; with a number first (`12G`) go to that page |
 | `Ctrl` `d` / `Ctrl` `u` | half a page down / up |
 | `zt` / `zz` / `zb` | scroll so that the cursor line is near the top / in the middle / near the bottom of the window, with about two lines above or below it; also in a selection |

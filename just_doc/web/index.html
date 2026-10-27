@@ -260,6 +260,7 @@
     <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>↓</kbd> <kbd>↑</kbd></td><td>move the cursor by line; the page follows</td></tr>
     <tr><td><kbd>0</kbd> <kbd>$</kbd></td><td>start / end of the line</td></tr>
     <tr><td><kbd>f</kbd> / <kbd>F</kbd> + character</td><td>go to that character after / before the cursor on the line</td></tr>
+    <tr><td><kbd>;</kbd> / <kbd>,</kbd></td><td>repeat the last <kbd>f</kbd> or <kbd>F</kbd> / the same the other way</td></tr>
     <tr><td><kbd>3w</kbd> <kbd>5j</kbd></td><td>a number first repeats the move</td></tr>
     <tr><td><kbd>gg</kbd> / <kbd>G</kbd></td><td>go to the top / bottom, the cursor too; <kbd>12G</kbd> goes to page 12</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>d</kbd> / <kbd>u</kbd></td><td>half a page down / up</td></tr>
@@ -2893,7 +2894,15 @@ function handleKey(e) {
     const dir = state.pending === 'f' ? 1 : -1;
     state.pending = '';
     hint('');
-    if (k.length === 1) findChar(k, dir, state.fCount);
+    if (k.length === 1) { state.lastFind = { ch: k, dir }; findChar(k, dir, state.fCount); }
+    return;
+  }
+  // ; repeats the last f or F, and , repeats it the other way
+  if ((k === ';' || k === ',') && !state.pending) {
+    e.preventDefault();
+    const n = parseInt(state.count, 10) || 1, f = state.lastFind;
+    state.count = '';
+    if (f) findChar(f.ch, k === ';' ? f.dir : -f.dir, n); else hint('no f or F to repeat yet');
     return;
   }
   if (k === 'f' || k === 'F') {

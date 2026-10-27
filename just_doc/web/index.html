@@ -1266,9 +1266,10 @@ function showCard() {
   card.className = 'card' + (it.a ? '' : ' own') + (ed ? ' editing' : '');
   const h = span('div', '', 'h');
   if (it.key) {
-    const items = navItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
-    // a done comment of an earlier round, clicked, is not among them: no place to count
-    if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} to look at` : ' · all looked at'), 'n'));
+    // where it is among what n goes through; how much is left to look at the toolbar says.
+    // A done comment of an earlier round, clicked, is not among them: no place to count.
+    const items = navItems(), at = items.findIndex(x => x.key === it.key);
+    if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}`, 'n'));
   }
   const r = it.a && theirs(it.a);
   h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'

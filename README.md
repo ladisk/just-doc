@@ -332,7 +332,7 @@ comes back to the same place; a click on a comment, in the list or on the page,
 opens its card too. A card beside the page (under the text when the margin is narrow) says who replied and what, with your comment above in
 grey, and shows the changes that belong to it, each as a sentence with the old
 words struck out in red and the new ones in green; the other changes have
-cards of their own, which name your comment only when it is still open. The card counts where you are ("3 of 7") and what you have not looked at yet ("2 to look at"),
+cards of their own, which name your comment only when it is still open. The card says where you are ("3 of 7"); the toolbar counts what you have not looked at yet,
 and what you have seen fades. `Esc` closes the card. On the card of a change, `a` comments on the change
 itself: the box and the comment keep the change in view, and `--wait` shows
 the assistant the text as it was before.

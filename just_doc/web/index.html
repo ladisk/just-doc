@@ -701,7 +701,7 @@ function drawChangeRows(list) {
   if (!items.length) return;
   const left = items.filter(it => !itemSeen(it)).length;
   const h = span('div', `${state.chgOpen ? '▾' : '▸'} ${items.length} change${items.length > 1 ? 's' : ''} without a comment`
-                        + (left ? ` · ${left} not seen` : ' · all seen'), 'grp chgs');
+                        + (left ? ` · ${left} to look at` : ' · all looked at'), 'grp chgs');
   h.addEventListener('click', () => { state.chgOpen = !state.chgOpen; drawList(); });
   list.append(h);
   for (const it of items) {
@@ -1268,7 +1268,7 @@ function showCard() {
   if (it.key) {
     const items = navItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
     // a done comment of an earlier round, clicked, is not among them: no place to count
-    if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
+    if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} to look at` : ' · all looked at'), 'n'));
   }
   const r = it.a && theirs(it.a);
   h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'

@@ -293,12 +293,13 @@ since your last `Ctrl+Enter`. A change near a comment belongs to it.
 
 `gn` goes to the next thing to look at, in page order from the selected
 comment or the cursor: a comment that the assistant answered (or marked done)
-since your last `Ctrl+Enter`, or a change. `gN` goes to the one before, so
+since your last `Ctrl+Enter`, or a change; changes a few lines apart on one
+page are one stop, with a card that lists them. `gN` goes to the one before, so
 `gn` then `gN` comes back to the same place; what you have seen stays in the
 list. A card under it says who replied and what, with your comment above in
 grey, and shows the changes that belong to it, each as a sentence with the old
-words struck out in red and the new ones in green; any other change has a card
-of its own. The card counts where you are ("3 of 7") and what is not seen yet,
+words struck out in red and the new ones in green; the other changes have
+cards of their own, which name your comment only when it is still open. The card counts where you are ("3 of 7") and what is not seen yet,
 and what you have seen fades. `Esc` closes the card. On the card of a change, `a` comments on the change
 itself: the box and the comment keep the change in view, and `--wait` shows
 the assistant the text as it was before.

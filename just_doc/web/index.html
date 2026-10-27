@@ -1085,14 +1085,20 @@ const answered = a => isNew(a) || (a.replies || []).some(r => r.from && Date.par
                       || Date.parse(a.done_at) > roundStart();
 
 // What there is to look at after a round, in page order: each answered comment, together
-// with the changes near it, and each other change. It stays the same while it is read: what
-// was seen stays in it, so gn and gN go through the same list both ways.
+// with the changes near it, and the other changes, a stretch of text at a time. It stays the
+// same while it is read: what was seen stays in it, so gn and gN go through it both ways.
 function reviewItems() {
   const items = [], mine = new Map();
+  let block = null;
   for (const m of state.changes?.marks || []) {
     const a = owner(m);
-    if (a && answered(a)) mine.set(a, [...(mine.get(a) || []), m]);
-    else items.push({ key: 'm' + m.sig, marks: [m], near: a, at: m.rects[0] });
+    if (a && answered(a)) { mine.set(a, [...(mine.get(a) || []), m]); continue; }
+    // changes on one page with less than about three lines between them are one stretch
+    const end = block?.marks.at(-1);
+    if (end && end.rects[0].p === m.rects[0].p && m.b0 - end.b1 < 40) { block.marks.push(m); continue; }
+    // an open comment near it; one that is done belongs to an earlier round
+    block = { key: 'm' + m.b0, marks: [m], near: a && !a.done ? a : null, at: m.rects[0] };
+    items.push(block);
   }
   for (const a of state.annots)
     if (answered(a)) items.push({ key: 'c' + a.id, a, marks: mine.get(a) || [], at: a.rects[0] });
@@ -1154,7 +1160,7 @@ function showCard() {
   h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
   const r = it.a && theirs(it.a);
   h.append(span('span', it.a ? (r ? r.from + ' replied' : 'done, no reply') + (r && it.a.done ? ' · done ✓' : '')
-                     : it.near ? 'a change near your comment' : 'a change', 't'));
+                     : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't'));
   if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);
   if (a) {
@@ -1169,11 +1175,12 @@ function showCard() {
     d.append(span('b', (r.from || 'you') + ': '), r.text);
     card.append(d);
   }
-  for (const m of it.marks) card.append(changeLine(m, span('div', '', 'chl')));
+  for (const m of it.marks.slice(0, 4)) card.append(changeLine(m, span('div', '', 'chl')));
+  if (it.marks.length > 4) card.append(span('div', `… and ${it.marks.length - 4} more changes here`, 'none'));
   if (it.a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
   const k = document.createElement('div');
   k.className = 'k';
-  k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;' : '<kbd>a</kbd> comment on it &nbsp;' + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
+  k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;' : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
     + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
   card.append(k);
   // under the lowest line of it on its page, inside the page so it scrolls with it

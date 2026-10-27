@@ -46,7 +46,8 @@ function show(id) {
 }
 
 // the viewers report their new replies; the sum goes into the title, where the task bar shows it
-window.tabNews = (id, n) => { news[id] = n; draw(); };
+const done = {};     // document id -> whether the assistant finished its answers and waits again
+window.tabNews = (id, n, ready) => { news[id] = n; done[id] = ready; draw(); };
 
 function draw() {
   bar.textContent = '';
@@ -54,7 +55,7 @@ function draw() {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
-    if (news[t.id]) { const b = document.createElement('b'); b.textContent = news[t.id]; el.appendChild(b); }
+    if (news[t.id]) { const b = document.createElement('b'); b.textContent = (done[t.id] ? '✓ ' : '') + news[t.id]; el.appendChild(b); }
     el.title = t.path;
     el.onclick = () => show(t.id);
     bar.appendChild(el);
@@ -65,7 +66,8 @@ function draw() {
   bar.appendChild(keys);
   document.body.classList.toggle('one', tabs.length < 2);
   const all = tabs.reduce((sum, t) => sum + (news[t.id] || 0), 0), shown = tabs.find(t => t.id === active);
-  if (shown) document.title = (all ? `(${all}) ` : '') + shown.name + ' – just-doc';
+  const ready = tabs.some(t => done[t.id]);
+  if (shown) document.title = (ready ? '✓ ' : '') + (all ? `(${all}) ` : '') + shown.name + ' – just-doc';
 }
 
 // the server sends the list of documents when it changes

@@ -208,7 +208,11 @@ The round goes like this:
    longer new. While no reply has come, the mark says that the comments are
    handed over; while a `just-doc --wait` waits for you, a green mark says
    so, and an amber one says that no `--wait` has taken your `Ctrl+Enter`
-   yet: the assistant has to run `--wait` again. The changes in the document are marked too, and come last in
+   yet: the assistant has to run `--wait` again. The replies come one by
+   one while the assistant works ("the assistant is answering … 2 replies
+   so far"); when it waits again, its answers are complete: a large green
+   mark says "✓ answers ready", a message pops up, and the title of the
+   window and the tab get a ✓. The changes in the document are marked too, and come last in
    the list (see "What changed").
 4. To answer a reply, press `A` on its card (or on the selected comment),
    write in the field that opens at the bottom of the card, and press

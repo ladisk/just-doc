@@ -38,6 +38,8 @@
   #news { display: none; border-radius: 10px; padding: 1px 10px; font-weight: 700; background: #555; color: #ddd; }
   #news.wait, #news.new, #news.agent { display: inline-block; }
   #news.agent { background: #1f7a3a; color: #fff; }
+  #news.ready { display: inline-block; background: #1f9a45; color: #fff; font-size: 15px; padding: 2px 14px;
+                box-shadow: 0 0 0 3px rgba(31, 154, 69, .35); }
   #news.lost { display: inline-block; background: #f0a000; color: #222; }
   #news.new { background: #2f7bff; color: #fff; }
   .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
@@ -1404,22 +1406,37 @@ function showNews() {
   const replies = state.annots.filter(isNew).length;
   // with the changes marked, n goes through them too
   const n = state.changes ? reviewItems().filter(it => !itemSeen(it)).length : replies;
-  if (replies) store.set('waiting', false);
   // a just-doc --wait that waits for this document: the assistant is done and it is your turn
-  const agent = !AT && window.parent.tabWaiting?.(DOC);
+  let agent = !AT && window.parent.tabWaiting?.(DOC);
   // a hand-over that no --wait has taken: nobody works on it, the assistant has to run --wait
   const lost = !AT && !agent && window.parent.tabPending?.(DOC);
+  // The replies come one by one while the assistant works; it is done when it waits again. Right
+  // after a hand-over its --wait still counts as waiting for a moment: done needs a pause between.
+  if (store.get('waiting', false) && !lost) {
+    if (!agent) showNews.worked = true;
+    else if (showNews.worked) {
+      store.set('waiting', false);
+      toast(`The assistant is done: ${replies} new ${replies === 1 ? 'reply' : 'replies'}` + (n ? ' · n goes through them' : ''));
+    }
+  }
+  const working = !lost && store.get('waiting', false), ready = agent && !working && n > 0;
+  if (working) agent = false;
   const el = $('news');
-  el.className = n ? 'new' : agent ? 'agent' : lost ? 'lost' : store.get('waiting', false) ? 'wait' : '';
-  el.textContent = n ? (state.changes ? `${n} to look at · n` : `${n} new ${n > 1 ? 'replies' : 'reply'} · n`)
+  el.className = ready ? 'ready' : agent ? 'agent' : lost ? 'lost' : working ? 'wait' : n ? 'new' : '';
+  const what = state.changes ? `${n} to look at` : `${n} new ${n > 1 ? 'replies' : 'reply'}`;
+  el.textContent = ready ? `✓ answers ready · ${what} · n`
     : agent ? 'the assistant waits for your comments · Ctrl+Enter'
-    : lost ? 'handed over · no assistant has picked it up yet' : 'handed over, waiting for replies …';
+    : lost ? 'handed over · no assistant has picked it up yet'
+    : working ? `the assistant is answering …` + (replies ? ` ${replies} ${replies === 1 ? 'reply' : 'replies'} so far` : '')
+    : `${what} · n`;
   for (const it of $('list').querySelectorAll('.it[data-id]')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
-  if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n);
+  if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n, ready);
 }
 
 // the window calls it when a just-doc --wait starts or stops waiting
 window.showNews = () => showNews();
+// a window loaded in the middle of a round (the assistant changed the file) has missed the work
+showNews.worked = true;
 
 function markSeen(id) {
   const a = state.annots.find(x => x.id === id);
@@ -1672,7 +1689,8 @@ window.reloadAnnots = async () => {
     }
     $('list').querySelector('.on')?.scrollIntoView({ block: 'nearest' });
     const n = state.annots.filter(isNew).length;
-    if (n > before) toast(`${n} new ${n > 1 ? 'replies' : 'reply'} — n goes to the next one`);
+    // during a round the replies come one by one: the message comes when the assistant is done (showNews)
+    if (n > before && !store.get('waiting', false)) toast(`${n} new ${n > 1 ? 'replies' : 'reply'} — n goes to the next one`);
   } catch (err) { console.error('reading the comments again failed', err); }
 };
 
@@ -1691,6 +1709,7 @@ async function handOver() {
     // open: a comment that waits for an answer, as --wait counts it
     const open = state.annots.filter(a => !a.done && !lastFrom(a)).length;
     store.set('waiting', open > 0);
+    showNews.worked = false;
     // a new round: the changes are counted from now on
     await loadRounds();
     drawList();

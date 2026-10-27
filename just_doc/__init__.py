@@ -132,7 +132,10 @@ Everything goes through these commands; do not edit the .comments.json file.
 
        just-doc FILE --reply 3 "what was changed" --done 3 --from NAME
 
-5. Go back to step 1, until the author says that the review is over.
+5. Go back to step 1, until the author says that the review is over. Start
+   the next --wait only after you answered every comment: the window shows
+   your replies as they come, and takes a waiting --wait as the sign that
+   your answers are complete.
 
 Other commands: just-doc FILE --read prints all comments, also the ones that
 are done or answered; add --json for the full data.

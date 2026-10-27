@@ -122,6 +122,7 @@
   .pg .card .rep.mine { border-left-color: #bbb; color: #666; font-size: 12px; }
   .pg .card .chl { margin-top: 4px; padding-top: 4px; border-top: 1px solid #eee; }
   .pg .card .none { margin-top: 4px; color: #999; font-size: 12px; }
+  .pg .card .was { color: #777; font-size: 12px; }
   .pg .card kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font: inherit; }
   .pg .oldtag { position: absolute; left: 0; top: 0; z-index: 4; padding: 2px 8px; background: #f08000; color: #fff;
                 font: 12px sans-serif; border-radius: 0 0 4px 0; }
@@ -133,31 +134,13 @@
   .it .r { margin: 3px 0 0 4px; padding-left: 6px; border-left: 2px solid #0050d0; white-space: pre-wrap; }
   .it .r b { color: #0050d0; }
   .it .r.mine { border-left-color: #999; font-weight: 600; }
-  #editor { position: fixed; z-index: 30; display: none; width: 380px; background: #fff; border: 2px solid #d00000;
-            border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.4); padding: 6px; }
-  #editor textarea { width: 100%; height: 90px; box-sizing: border-box; border: 0; outline: 0; resize: vertical;
-            font: 14px/1.4 system-ui, sans-serif; }
-  #editor small { color: #888; }
-  #editor.reply { border-color: #2f7bff; }
-  #etitle { margin-bottom: 4px; font-size: 12px; font-weight: 700; color: #d00000; }
-  #editor.reply #etitle { color: #0050d0; }
-  #ethread { display: none; max-height: 40vh; overflow-y: auto; margin-bottom: 6px; padding-bottom: 6px;
-             border-bottom: 1px solid #ddd; font-size: 13px; line-height: 1.35; }
-  #ethread div { margin-top: 3px; white-space: pre-wrap; }
-  #ethread div:first-child { margin-top: 0; }
-  #ethread b { color: #0050d0; }
-  #ethread .state { float: right; margin: 0 0 4px 8px; padding: 0 8px; border-radius: 9px; background: #ffe0b0; color: #7a4300;
-                    font-size: 11px; font-weight: 700; }
-  #ethread .state.done { background: #c9f2c9; color: #14601f; }
-  #ethread .mine { color: #555; }
-  #ethread .mine b { color: #777; }
-  #ethread .was { position: sticky; top: 0; clear: both; margin: 0 0 4px; padding: 3px 6px; border-radius: 3px;
-                  background: #f1f1f1; color: #555; }
-  #ethread .was i { color: #888; }
-  #ethread .was.chg { background: #fff; border: 1px solid #ddd; color: #222; }
-  #ethread .was .ctx { color: #888; }
-  #ethread .was del { color: #c00000; background: #ffe3e3; text-decoration-thickness: 2px; }
-  #ethread .was ins { color: #0b5d1e; background: #d4f5d4; text-decoration: none; font-weight: 600; }
+  #editor { display: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid #eee; }
+  .pg .card #editor { display: block; }
+  .pg .card.editing { width: 440px; }
+  #editor textarea { width: 100%; height: 70px; box-sizing: border-box; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px;
+                     outline: 0; resize: vertical; font: 14px/1.4 system-ui, sans-serif; }
+  #editor textarea:focus { border-color: #2f7bff; }
+  #editor small { color: #888; font-size: 11px; }
   ::highlight(find) { background-color: rgba(255, 150, 0, .38); }
   ::highlight(pieces) { background-color: rgba(0, 0, 255, .25); }
   ::highlight(findcur) { background-color: rgba(225, 0, 110, .45); }
@@ -280,7 +263,7 @@
     <tr><td><kbd>Esc</kbd></td><td>cancel / deselect</td></tr>
   </table>
 </div></div>
-<div id="editor"><div id="etitle"></div><div id="ethread"></div><textarea id="etext" placeholder="comment …"></textarea>
+<div id="editor"><textarea id="etext" placeholder="comment …"></textarea>
   <small>Enter saves · Shift+Enter new line · Esc cancels</small></div>
 
 <script type="module">
@@ -1186,23 +1169,43 @@ function goItem(it) {
   $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
 }
 
-// the card under what gn went to: who answered and what, above it your comment, and the
-// changes that belong to it
+// The card: one box for a comment and what belongs to it, under its text. gn shows it with
+// the reply, your comment and the changes near it; a, A and E add the field at its bottom.
 function showCard() {
+  // the field is taken out of the old card first, or it goes with it
+  const field = $('editor'), had = document.activeElement === $('etext');
+  state.drawing = true;
+  document.body.append(field);
   document.querySelector('.pg .card')?.remove();
-  const it = state.item;
+  state.drawing = false;
+  const ed = state.editing && state.annots.find(x => x.id === state.editing);
+  // a comment that is written now has the card of gn if that is its own, or one of its own
+  let it = state.item;
+  if (ed && it?.a?.id !== ed.id) {
+    // a comment on a change keeps the change in view
+    const m = ed.change === undefined ? null
+      : state.changes?.marks.find(m => m.was === ed.change && m.now === ed.text) || { was: ed.change, now: ed.text };
+    it = { a: ed, marks: m ? [m] : [], at: ed.rects[0] };
+  }
   if (!it || state.oldShown) return;
-  const a = it.a || it.near, card = document.createElement('div');
-  card.className = 'card' + (it.a ? '' : ' own');
-  const items = reviewItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
+  const a = it.a || it.near, writing = ed && !state.replying, card = document.createElement('div');
+  card.className = 'card' + (it.a ? '' : ' own') + (ed ? ' editing' : '');
   const h = span('div', '', 'h');
-  h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
+  if (it.key) {
+    const items = reviewItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
+    h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
+  }
   const r = it.a && theirs(it.a);
-  h.append(span('span', it.a ? (r ? r.from + ' replied' : 'done, no reply') + (r && it.a.done ? ' · done ✓' : '')
+  h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'
+                     : it.a ? (r ? r.from + ' replied' : it.a.done ? 'done, no reply' : 'your comment') + (r && it.a.done ? ' · done ✓' : '')
                      : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't'));
   if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);
-  if (a) {
+  if (writing && !state.fresh && (r || ed.done))
+    card.append(span('div', `${r ? r.from : 'the other side'} does not see a change of your comment; A replies`, 'none'));
+  if (a && a.change === undefined && (a.was !== undefined || (a.lost && a.text)))
+    card.append(span('div', (a.was !== undefined ? 'before: ' : 'before, not found now: ') + '«' + (a.was ?? a.text) + '»', 'was'));
+  if (a && !writing) {
     const y = span('div', '', 'yours');
     y.append(span('b', 'you: '), a.comment || (a.kind === 'strike' ? '(delete)' : '(no comment)'));
     card.append(y);
@@ -1216,18 +1219,26 @@ function showCard() {
   }
   for (const m of it.marks.slice(0, 4)) card.append(changeLine(m, span('div', '', 'chl')));
   if (it.marks.length > 4) card.append(span('div', `… and ${it.marks.length - 4} more changes here`, 'none'));
-  if (it.a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
-  const k = document.createElement('div');
-  k.className = 'k';
-  k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;' : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
-    + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
-  card.append(k);
+  if (it.key && it.a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
+  if (ed) {
+    card.append(field);
+    // a click on the card leaves the field open
+    card.addEventListener('mousedown', e => { if (e.target !== $('etext')) e.preventDefault(); });
+  } else {
+    const k = document.createElement('div');
+    k.className = 'k';
+    k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;'
+                         : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
+      + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
+    card.append(k);
+  }
   // under the lowest line of it on its page, inside the page so it scrolls with it
-  const lines = [...(it.a ? it.a.rects : []), ...it.marks.flatMap(m => m.rects)].filter(r => r.p === it.at.p);
+  const lines = [...(it.a ? it.a.rects : []), ...it.marks.flatMap(m => m.rects || [])].filter(r => r.p === it.at.p);
   const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]), pg = pgs[it.at.p];
   card.style.top = (low.y + low.h) * state.scale + 6 + 'px';
   pg.appendChild(card);
   card.style.left = Math.max(4, Math.min(it.at.x * state.scale, pg.offsetWidth - card.offsetWidth - 4)) + 'px';
+  if (had && ed) $('etext').focus();
 }
 
 // a on a change that gn went to: a comment on the change; it keeps the text as it was, for
@@ -1499,82 +1510,28 @@ function editOrReply(id) {
 }
 
 // fresh: the highlight was made together with this comment, so Esc removes it again;
-// reply: the box adds a reply to the comment and leaves the comment as it is
+// reply: the field adds a reply to the comment and leaves the comment as it is.
+// The field is at the bottom of the card of the comment.
 function openEditor(id, fresh = false, reply = false) {
   if (AT) { readOnly(); return; }
   const a = state.annots.find(x => x.id === id);
   if (!a) return;
+  if (state.editing) closeEditor(true);
   state.editing = id;
   state.fresh = fresh;
   state.replying = reply;
   select(id);
-  const last = a.rects[a.rects.length - 1];
-  const box = pgs[last.p].getBoundingClientRect();
-  const ed = $('editor'), them = theirs(a);
-  ed.className = reply ? 'reply' : '';
-  $('etitle').textContent = !reply ? (fresh ? 'new comment' : 'edit your comment')
-    : them ? `reply to ${them.from}` : 'add to your comment';
-  // a reply is written below what was said so far
-  const thread = $('ethread');
-  thread.replaceChildren();
-  if (reply) {
-    const d = document.createElement('div');
-    d.className = a.done ? 'state done' : 'state';
-    d.textContent = a.done ? 'done ✓' : 'open';
-    thread.append(d);
-    if (a.change === undefined && (a.was !== undefined || (a.lost && a.text))) {
-      // the text as it was before it changed; it stays in view above the replies
-      const w = document.createElement('div'), i = document.createElement('i');
-      w.className = 'was';
-      i.textContent = a.was !== undefined ? 'before ' : 'before, not found now ';
-      w.append(i, '«' + (a.was ?? a.text) + '»');
-      thread.append(w);
-    }
-  }
-  if (a.change !== undefined) {
-    // a comment on a change: the change stays in view above the comment, as on its card
-    const w = document.createElement('div'), m = state.changes?.marks.find(m => m.was === a.change && m.now === a.text);
-    w.className = 'was chg';
-    if (m?.pre) w.append(span('span', '… ' + m.pre + ' ', 'ctx'));
-    if (a.change) w.append(span('del', a.change), ' ');
-    if (a.text) w.append(span('ins', a.text), ' ');
-    if (m?.post) w.append(span('span', m.post + ' …', 'ctx'));
-    thread.append(w);
-  }
-  for (const r of reply ? [{ text: a.comment }, ...(a.replies || [])] : []) {
-    if (!r.text) continue;
-    const d = document.createElement('div'); d.className = r.from ? '' : 'mine';
-    d.append(span('b', (r.from || 'you') + ': '), r.text);
-    thread.append(d);
-  }
-  thread.style.display = thread.children.length ? 'block' : 'none';
-  ed.style.display = 'block';
-  thread.scrollTop = thread.scrollHeight;
-  let left = box.left + last.x * state.scale;
-  let top = box.top + (last.y + last.h) * state.scale + 8;
-  left = Math.max(8, Math.min(left, window.innerWidth - $('side').offsetWidth - 400));
-  const room = ed.offsetHeight + 30;
-  if (top > window.innerHeight - room || top < 50) top = Math.max(60, window.innerHeight - room - 20);
-  // the card of gn shows the same conversation: the box takes its place while it is open
-  const card = document.querySelector('.pg .card');
-  if (card) {
-    const r = card.getBoundingClientRect();
-    left = Math.max(8, Math.min(r.left, window.innerWidth - $('side').offsetWidth - ed.offsetWidth - 8));
-    top = Math.max(60, Math.min(r.top, window.innerHeight - room - 20));
-    card.style.visibility = 'hidden';
-  }
-  ed.style.left = left + 'px';
-  ed.style.top = top + 'px';
   $('etext').value = reply ? '' : a.comment;
   $('etext').placeholder = reply ? 'reply …' : 'comment …';
+  showCard();
   $('etext').focus();
+  document.querySelector('.pg .card')?.scrollIntoView({ block: 'nearest' });
 }
 
 function closeEditor(commit) {
   if (!state.editing) return;
   const a = state.annots.find(x => x.id === state.editing);
   state.editing = null;
-  $('editor').style.display = 'none';
   const said = $('etext').value.trim();
   if (a && state.replying) {
     if (commit && said) {
@@ -1602,7 +1559,7 @@ $('etext').addEventListener('keydown', e => {
   else if (e.key === 'Escape') { e.preventDefault(); closeEditor(false); }
 });
 // a click elsewhere in the page saves and closes the box; going to another window does not
-$('etext').addEventListener('blur', () => { if (document.hasFocus()) closeEditor(true); });
+$('etext').addEventListener('blur', () => { if (document.hasFocus() && !state.drawing) closeEditor(true); });
 
 // the comments were changed from outside (a reply came in): read them again
 window.reloadAnnots = async () => {

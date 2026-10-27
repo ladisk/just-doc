@@ -35,7 +35,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 
 | key | action |
 |---|---|
-| `a` | highlight the selection and write a comment, or edit the comment of the selected mark; once the comment is answered or done, `a` adds a reply instead; `Enter` in an empty box leaves a plain highlight |
+| `a` | highlight the selection and write a comment; on a selected comment, edit it, or once it is answered or done, reply; `Enter` in an empty field leaves a plain highlight |
 | `A` | reply to the selected comment, the one of the open card or the one under the cursor (see "Reviewing with a coding assistant") |
 | `gn` / `gN` | go to the next / previous comment answered since the last hand-over, or change, starting from where you are; a card shows it (see "What changed") |
 | `za` | open or close the row of the comment in the list, or on a change the group of changes; `zR` / `zM` open / close all rows |
@@ -74,7 +74,9 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `?` | show or hide the full key list; in it `/` filters the keys by what you type |
 | `Esc` | deselect |
 
-In the comment box, `Enter` saves and `Shift+Enter` starts a new line.
+A comment, a reply and an edit are written in a field at the bottom of the
+comment's card, under its text. `Enter` saves, `Shift+Enter` starts a new
+line, `Esc` cancels.
 
 The browser's own shortcuts (print, find, history, bookmarks and so on) are
 switched off in the window. Copy (`Ctrl+C`), reload (`Ctrl+R`, `F5`), full
@@ -201,8 +203,8 @@ The round goes like this:
    The changes in the document are marked too, and `gn` goes through them
    together with the replies (see "What changed").
 4. To answer a reply, press `A` on its card (or on the selected comment),
-   write, and press `Ctrl+Enter` again. The box says whom you reply to and
-   shows the comment and the replies so far.
+   write in the field that opens at the bottom of the card, and press
+   `Ctrl+Enter` again.
 
 Each row of the list is two lines: a mark that says where the comment stands
 (new reply, answered, waiting, done, not handed over), the page and the text;
@@ -245,8 +247,8 @@ it is greyed in the list, under "answered since your Ctrl+Enter". At your
 next `Ctrl+Enter` the done comments that you have looked at leave the page
 and the list, so each round starts with what is still open; nothing leaves
 before that. `D` shows them again, and the
-top of the list says how many there are. The reply box (`A`) says whether the
-comment is open or done. Answering a done comment opens it again, so the next
+top of the list says how many there are. The card says whether the comment is
+done. Answering a done comment opens it again, so the next
 `--wait` prints it. `--done` can be combined
 with `--reply` and given several times.
 
@@ -264,8 +266,8 @@ version:
   new place.
 - Text that was changed is found by the text around it. What stands there
   now is marked green, and the list shows both: ~~«teh»~~ → «the». `--read`
-  prints the new text and the old one. The reply box (`A`) shows the old text
-  in its first line, above the replies.
+  prints the new text and the old one. The card shows the old text above the
+  replies.
 - When the text around it is gone too, the comment keeps its old place and
   the list says "text not found". A short text, such as one word, is not
   looked for on other pages, because the same word stands in many places.

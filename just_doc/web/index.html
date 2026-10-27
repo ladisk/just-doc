@@ -1603,6 +1603,15 @@ window.reloadAnnots = async () => {
     if (await keepOnPages()) save();
     redraw();
     showNews();
+    // the open card shows the new reply; while a comment is written it is left alone
+    const it = state.item;
+    if (it && !state.editing) {
+      const fresh = x => x && state.annots.find(y => y.id === x.id);
+      if (it.near) it.near = fresh(it.near) || null;
+      // a comment that is gone takes its card with it
+      if (it.a && !(it.a = fresh(it.a))) state.item = null;
+      showCard();
+    }
     $('list').querySelector('.on')?.scrollIntoView({ block: 'nearest' });
     const n = state.annots.filter(isNew).length;
     if (n > before) toast(`${n} new ${n > 1 ? 'replies' : 'reply'} — n goes to the next one`);

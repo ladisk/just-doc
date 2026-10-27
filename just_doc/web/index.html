@@ -2494,24 +2494,25 @@ document.addEventListener('mousemove', e => {
 const PEEK_H = 260;
 const peek = { link: null, want: null, openTimer: 0, closeTimer: 0, seq: 0 };
 const peekPages = new Map();  // `page@scale` -> promise of a rendered canvas; the last few are kept
-const textSpan = {};          // page number -> promise of {x0, x1, h, caps}: the text's left and right, the page height
-                              // and the heights of caption lines, in points
+const textSpan = {};          // page number -> promise of {x0, x1, w, h, caps, items}: the text's left and right, the
+                              // page width and height, the heights of caption lines and each text piece [x, y, width], in points
 const CAPTION = /^\s*(fig(ure|\.)?|slika|abb(ildung|\.)?|table|tab(ela|elle|\.)?)\s*\d/i;
 
 function pageTextSpan(p) {
   return textSpan[p] ??= (async () => {
     const page = await pdf.getPage(p), vp = page.getViewport({ scale: 1 });
     let x0 = Infinity, x1 = -Infinity;
-    const caps = [];
+    const caps = [], items = [];
     for (const it of (await page.getTextContent()).items) {
       if (!it.str || !it.str.trim()) continue;
       const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
       x0 = Math.min(x0, x); x1 = Math.max(x1, x + it.width);
+      items.push([x, y, it.width]);
       if (CAPTION.test(it.str)) caps.push(y);
     }
     // a page with almost no text (a figure, a page number only) is shown whole
     if (!(x1 - x0 > vp.width * 0.4)) [x0, x1] = [8, vp.width - 8];
-    return { x0: Math.max(0, x0 - 8), x1: Math.min(vp.width, x1 + 8), h: vp.height, caps };
+    return { x0: Math.max(0, x0 - 8), x1: Math.min(vp.width, x1 + 8), w: vp.width, h: vp.height, caps, items };
   })();
 }
 
@@ -2542,17 +2543,23 @@ async function openPeek(l, p) {
   const seq = ++peek.seq;
   let d;
   try { d = await resolveDest(l.dest); } catch { hint('the target of the link was not found'); return; }
-  const box = $('peek'), { x0, x1, h: ph, caps } = await pageTextSpan(d.page);
-  const w = Math.min(560, innerWidth * 0.45) - 4;
-  const scale = Math.round(w / (x1 - x0) * 100) / 100;
-  const src = await pageCanvas(d.page, scale);
-  if (seq !== peek.seq) return;
+  const box = $('peek'), { x0: px0, x1: px1, w: pw, h: ph, caps, items } = await pageTextSpan(d.page);
   // a figure reference often points at the caption, below the image: show more above than below.
   // With hypcap it points at the top of the figure instead: then the caption is further down,
   // and the crop starts at the target.
-  const h = Math.min(PEEK_H, ph);
-  const float = !(typeof l.dest === 'string' && !/fig|tab/i.test(l.dest)) && caps.some(y => y > d.y + 20 && y < d.y + 2 * h);
+  const float = !(typeof l.dest === 'string' && !/fig|tab/i.test(l.dest)) && caps.some(y => y > d.y + 20 && y < d.y + 2 * Math.min(PEEK_H, ph));
+  const h = Math.min(float ? PEEK_H : PEEK_H * 0.65, ph);
   const top = Math.min(ph - h, Math.max(0, float ? d.y - 15 : d.y - h * 0.65));
+  // the width of the text in the stretch that is shown: margin notes elsewhere on the page do not widen it
+  let x0 = Infinity, x1 = -Infinity;
+  for (const [x, y, iw] of items) if (y >= top && y <= top + h) { x0 = Math.min(x0, x); x1 = Math.max(x1, x + iw); }
+  if (x1 - x0 > (px1 - px0) * 0.3) { x0 = Math.max(0, x0 - 8); x1 = Math.min(pw, x1 + 8); } else [x0, x1] = [px0, px1];
+  // an equation is small in a whole text width: it gets a wider box and less height around it
+  const w = (float ? Math.min(560, innerWidth * 0.45) : Math.min(840, innerWidth * 0.62)) - 4;
+  box.style.width = w + 4 + 'px';
+  const scale = Math.round(w / (x1 - x0) * 100) / 100;
+  const src = await pageCanvas(d.page, scale);
+  if (seq !== peek.seq) return;
   const cv = box.querySelector('canvas'), k = scale * dpr;
   cv.width = Math.round((x1 - x0) * k);
   cv.height = Math.round(h * k);

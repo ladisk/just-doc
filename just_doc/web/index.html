@@ -48,7 +48,11 @@
   .pg .hl div.c { background: #ffb347; }
   .pg .hl div.box { background: rgba(255, 179, 71, .16); border: 2px solid #f08000; box-sizing: border-box; }
   .pg .hl div.strike { background: linear-gradient(transparent 44%, #d00000 44%, #d00000 56%, transparent 56%); border-radius: 0; }
-  .pg .hl div.on { outline: 2px solid #d00000; outline-offset: 1px; }
+  /* the selected comment: a thick frame that blinks when it is new, and the other marks step back */
+  .pg .hl div.on { outline: 3px solid #d00000; outline-offset: 1px; }
+  .pg .hl div.on.pulse { animation: pulse .5s ease-in-out 2; }
+  @keyframes pulse { 50% { outline-color: transparent; } }
+  body.has-sel .pg .hl div:not(.on) { opacity: .3; }
   .pg .hl div.done:not(.on) { opacity: .3; }
   .pg .lk { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
   .pg .lk div { position: absolute; box-sizing: border-box; background: rgba(0, 90, 255, .07);
@@ -556,6 +560,11 @@ function drawHighlights() {
       pgs[r.p]?.querySelector('.hl').appendChild(d);
     }
   }
+  // the selected comment: the other marks step back, and its frame blinks when it is new
+  const sel = state.annots.find(a => a.id === state.sel);
+  document.body.classList.toggle('has-sel', !!sel);
+  if (sel && state.pulsed !== sel.id) for (const d of document.querySelectorAll('.pg .hl div.on')) d.classList.add('pulse');
+  state.pulsed = sel?.id;
   const c = state.changes;
   for (const m of c ? c.marks : []) {
     for (const r of m.rects) {

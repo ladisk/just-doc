@@ -244,7 +244,7 @@
     <tr><td><kbd>C</kbd></td><td>hide or show the highlights on the page</td></tr>
     <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; done ones of earlier rounds are skipped unless <kbd>D</kbd> shows them; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>follow the link under the cursor; <kbd>Tab</kbd> moves the cursor to the next link</td></tr>
-    <tr><td><kbd>K</kbd></td><td>preview the target of the link under the cursor (resting the mouse on a link does the same); a click on the preview goes there, <kbd>Esc</kbd> or <kbd>K</kbd> closes it</td></tr>
+    <tr><td><kbd>K</kbd></td><td>preview the target of the link under the cursor (resting the mouse on a link does the same); <kbd>j</kbd> / <kbd>k</kbd> or the wheel scroll it within the page, a click on it goes there, <kbd>Esc</kbd> or <kbd>K</kbd> closes it</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again</td></tr>
     <tr><td><kbd>/</kbd></td><td>search the whole PDF; <kbd>Enter</kbd> starts it</td></tr>
     <tr class="sub"><td><kbd>n</kbd> / <kbd>N</kbd></td><td>next / previous match, while a search is active</td></tr>
@@ -2564,7 +2564,8 @@ async function openPeek(l, p) {
   cv.width = Math.round((x1 - x0) * k);
   cv.height = Math.round(h * k);
   cv.style.height = h * scale + 'px';
-  cv.getContext('2d').drawImage(src, x0 * k, top * k, cv.width, cv.height, 0, 0, cv.width, cv.height);
+  peek.view = { src, x0, k, h, ph, top, scale };
+  drawPeek();
   box.querySelector('.h').textContent = 'p. ' + d.page;
   box.classList.add('open');
   peek.link = l;
@@ -2579,6 +2580,23 @@ async function openPeek(l, p) {
   box.style.top = y + 'px';
   box.style.left = Math.max(4, Math.min(right - bw - 4, ll)) + 'px';
 }
+
+// the stretch of the target page in the preview; the wheel and j / k move it within the page
+function drawPeek() {
+  const v = peek.view, cv = $('peek').querySelector('canvas');
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  cv.getContext('2d').drawImage(v.src, v.x0 * v.k, v.top * v.k, cv.width, cv.height, 0, 0, cv.width, cv.height);
+}
+function scrollPeek(points) {
+  const v = peek.view;
+  v.top = Math.min(v.ph - v.h, Math.max(0, v.top + points));
+  drawPeek();
+}
+$('peek').addEventListener('wheel', e => {
+  if (e.ctrlKey || !peek.view) return;
+  e.preventDefault();
+  scrollPeek(e.deltaY / peek.view.scale);
+}, { passive: false });
 
 function closePeek() {
   clearTimeout(peek.openTimer); stayPeek();
@@ -2779,8 +2797,11 @@ function handleKey(e) {
   const k = e.key, lower = k.toLowerCase();
   if (k === 'Shift' || k === 'CapsLock' || k === 'AltGraph') return;
 
-  // an open preview closes on Esc and K before anything else, and on any other key as well
+  // an open preview scrolls with j / k and the arrows, and closes on Esc and K before anything
+  // else, and on any other key as well
   if (peekOpen()) {
+    const step = { j: 40, ArrowDown: 40, k: -40, ArrowUp: -40 }[k];
+    if (step) { e.preventDefault(); scrollPeek(step); return; }
     closePeek();
     if (k === 'Escape' || k === 'K') { e.preventDefault(); return; }
   }

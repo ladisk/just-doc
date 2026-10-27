@@ -128,6 +128,8 @@
   .pg .card .chl { margin-top: 4px; padding-top: 4px; border-top: 1px solid #eee; }
   .pg .card .none { margin-top: 4px; color: #999; font-size: 12px; }
   .pg .card .was { color: #777; font-size: 12px; }
+  /* a card beside the page: a bar in the right margin beside the lines of the comment, and an arm to the card */
+  .pg .cardlink { position: absolute; z-index: 5; background: #2f7bff; pointer-events: none; border-radius: 2px; }
   .pg .card kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font: inherit; }
   .pg .oldtag { position: absolute; left: 0; top: 0; z-index: 4; padding: 2px 8px; background: #f08000; color: #fff;
                 font: 12px sans-serif; border-radius: 0 0 4px 0; }
@@ -1210,6 +1212,7 @@ function showCard() {
   state.drawing = true;
   document.body.append(field);
   document.querySelector('.pg .card')?.remove();
+  for (const el of document.querySelectorAll('.pg .cardlink')) el.remove();
   state.drawing = false;
   const ed = state.editing && state.annots.find(x => x.id === state.editing);
   // a comment that is written now has the card of n if that is its own, or one of its own
@@ -1278,8 +1281,13 @@ function showCard() {
     // beyond the page the card would shrink to its narrowest: it takes the width of its text
     card.style.maxWidth = w;
     card.style.width = ed ? w : 'max-content';
-    card.style.top = Math.min(...lines.map(r => r.y)) * state.scale + 'px';
+    const top = Math.min(...lines.map(r => r.y)), first = lines.find(r => r.y === top);
+    card.style.top = top * state.scale + 'px';
     card.style.left = pg.offsetWidth + gap + 'px';
+    // the bar stands in the page margin, so it crosses no text; the arm leaves it at the first line
+    const x = Math.min(Math.max(...lines.map(r => r.x + r.w)) * state.scale + 6, pg.offsetWidth - 6), link = css => { const d = document.createElement('div'); d.className = 'cardlink'; d.style.cssText = css; pg.appendChild(d); };
+    link(`left:${x}px;top:${top * state.scale}px;width:3px;height:${(Math.max(...lines.map(r => r.y + r.h)) - top) * state.scale}px`);
+    link(`left:${x}px;top:${(first.y + first.h / 2) * state.scale - 1}px;width:${pg.offsetWidth + gap - x}px;height:2px`);
   } else {
     const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]);
     card.style.top = (low.y + low.h) * state.scale + 6 + 'px';

@@ -128,6 +128,12 @@
   .pg .card .was { color: #777; font-size: 12px; }
   /* a card beside the page: a bar in the right margin beside the lines of the comment, and an arm to the card */
   .pg .cardlink { position: absolute; z-index: 5; background: #2f7bff; pointer-events: none; border-radius: 2px; }
+  /* the preview of a link's target: a crop of the target page, in the style of the card */
+  #peek { position: fixed; z-index: 30; display: none; width: min(560px, 45vw); background: #fff; color: #222;
+          border: 2px solid #2f7bff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.35); overflow: hidden; cursor: pointer; }
+  #peek.open { display: block; }
+  #peek .h { font: 12px/1.6 system-ui, sans-serif; color: #666; padding: 1px 9px; border-bottom: 1px solid #eee; }
+  #peek canvas { display: block; width: 100%; }
   .pg .card kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font: inherit; }
   .pg .oldtag { position: absolute; left: 0; top: 0; z-index: 4; padding: 2px 8px; background: #f08000; color: #fff;
                 font: 12px sans-serif; border-radius: 0 0 4px 0; }
@@ -209,8 +215,9 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>K</kbd> preview &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
+<div id="peek"><div class="h"></div><canvas></canvas></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
 <div id="toast"></div>
@@ -237,6 +244,7 @@
     <tr><td><kbd>C</kbd></td><td>hide or show the highlights on the page</td></tr>
     <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; done ones of earlier rounds are skipped unless <kbd>D</kbd> shows them; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>follow the link under the cursor; <kbd>Tab</kbd> moves the cursor to the next link</td></tr>
+    <tr><td><kbd>K</kbd></td><td>preview the target of the link under the cursor (resting the mouse on a link does the same); a click on the preview goes there, <kbd>Esc</kbd> or <kbd>K</kbd> closes it</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again</td></tr>
     <tr><td><kbd>/</kbd></td><td>search the whole PDF; <kbd>Enter</kbd> starts it</td></tr>
     <tr class="sub"><td><kbd>n</kbd> / <kbd>N</kbd></td><td>next / previous match, while a search is active</td></tr>
@@ -2398,6 +2406,7 @@ function cursorLink() {
 }
 
 async function followLink(l) {
+  closePeek();
   if (l.url) { window.open(l.url, '_blank', 'noopener'); return; }
   let d;
   try { d = await resolveDest(l.dest); } catch { hint('the target of the link was not found'); return; }
@@ -2469,13 +2478,132 @@ function jump(from, to) {
 
 document.addEventListener('mousemove', e => {
   const pg = !drag && !state.rectMode && e.target.closest && e.target.closest('.pg');
-  let on = false;
+  let on = null;
   if (pg) {
     const box = pg.getBoundingClientRect();
-    on = !!linkAt(+pg.dataset.page, (e.clientX - box.left) / state.scale, (e.clientY - box.top) / state.scale);
+    on = linkAt(+pg.dataset.page, (e.clientX - box.left) / state.scale, (e.clientY - box.top) / state.scale);
   }
-  document.body.classList.toggle('onlink', on);
+  document.body.classList.toggle('onlink', !!on);
+  peekHover(on, pg && +pg.dataset.page, e.target.closest && e.target.closest('#peek'));
 });
+
+// ---------- preview of a link's target ----------
+
+// The preview shows the target of an internal link without going there: a crop of the target
+// page, as wide as its text and 260 points high. It opens when the mouse rests on a link, or with K.
+const PEEK_H = 260;
+const peek = { link: null, want: null, openTimer: 0, closeTimer: 0, seq: 0 };
+const peekPages = new Map();  // `page@scale` -> promise of a rendered canvas; the last few are kept
+const textSpan = {};          // page number -> promise of {x0, x1, h, caps}: the text's left and right, the page height
+                              // and the heights of caption lines, in points
+const CAPTION = /^\s*(fig(ure|\.)?|slika|abb(ildung|\.)?|table|tab(ela|elle|\.)?)\s*\d/i;
+
+function pageTextSpan(p) {
+  return textSpan[p] ??= (async () => {
+    const page = await pdf.getPage(p), vp = page.getViewport({ scale: 1 });
+    let x0 = Infinity, x1 = -Infinity;
+    const caps = [];
+    for (const it of (await page.getTextContent()).items) {
+      if (!it.str || !it.str.trim()) continue;
+      const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x + it.width);
+      if (CAPTION.test(it.str)) caps.push(y);
+    }
+    // a page with almost no text (a figure, a page number only) is shown whole
+    if (!(x1 - x0 > vp.width * 0.4)) [x0, x1] = [8, vp.width - 8];
+    return { x0: Math.max(0, x0 - 8), x1: Math.min(vp.width, x1 + 8), h: vp.height, caps };
+  })();
+}
+
+function pageCanvas(p, scale) {
+  const key = p + '@' + scale;
+  let c = peekPages.get(key);
+  if (c) { peekPages.delete(key); peekPages.set(key, c); return c; }
+  c = (async () => {
+    const page = await pdf.getPage(p), vp = page.getViewport({ scale: scale * dpr });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(vp.width);
+    canvas.height = Math.floor(vp.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    return canvas;
+  })();
+  c.catch(() => peekPages.delete(key));
+  peekPages.set(key, c);
+  while (peekPages.size > 6) {
+    const [k, old] = peekPages.entries().next().value;
+    peekPages.delete(k);
+    old.then(cv => { cv.width = 0; }, () => {});
+  }
+  return c;
+}
+
+async function openPeek(l, p) {
+  clearTimeout(peek.openTimer); stayPeek();
+  const seq = ++peek.seq;
+  let d;
+  try { d = await resolveDest(l.dest); } catch { hint('the target of the link was not found'); return; }
+  const box = $('peek'), { x0, x1, h: ph, caps } = await pageTextSpan(d.page);
+  const w = Math.min(560, innerWidth * 0.45) - 4;
+  const scale = Math.round(w / (x1 - x0) * 100) / 100;
+  const src = await pageCanvas(d.page, scale);
+  if (seq !== peek.seq) return;
+  // a figure reference often points at the caption, below the image: show more above than below.
+  // With hypcap it points at the top of the figure instead: then the caption is further down,
+  // and the crop starts at the target.
+  const h = Math.min(PEEK_H, ph);
+  const float = !(typeof l.dest === 'string' && !/fig|tab/i.test(l.dest)) && caps.some(y => y > d.y + 20 && y < d.y + 2 * h);
+  const top = Math.min(ph - h, Math.max(0, float ? d.y - 15 : d.y - h * 0.65));
+  const cv = box.querySelector('canvas'), k = scale * dpr;
+  cv.width = Math.round((x1 - x0) * k);
+  cv.height = Math.round(h * k);
+  cv.style.height = h * scale + 'px';
+  cv.getContext('2d').drawImage(src, x0 * k, top * k, cv.width, cv.height, 0, 0, cv.width, cv.height);
+  box.querySelector('.h').textContent = 'p. ' + d.page;
+  box.classList.add('open');
+  peek.link = l;
+  // below the link, or above it when there is no room below; inside the window, left of the comment list
+  const pb = pgs[p].getBoundingClientRect();
+  const lt = pb.top + l.y * state.scale, lb = lt + l.h * state.scale, ll = pb.left + l.x * state.scale;
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  const right = innerWidth - (document.body.classList.contains('no-side') ? 0 : $('side').offsetWidth);
+  const bottom = innerHeight - $('foot').offsetHeight;
+  let y = lb + 4;
+  if (y + bh > bottom) y = lt - 4 - bh >= 0 ? lt - 4 - bh : Math.max(0, bottom - bh);
+  box.style.top = y + 'px';
+  box.style.left = Math.max(4, Math.min(right - bw - 4, ll)) + 'px';
+}
+
+function closePeek() {
+  clearTimeout(peek.openTimer); stayPeek();
+  peek.seq++;
+  peek.link = peek.want = null;
+  $('peek').classList.remove('open');
+}
+
+const peekOpen = () => $('peek').classList.contains('open');
+
+// the mouse resting on an internal link opens its preview; leaving the link and the preview closes it,
+// after a moment, so that the mouse can move from the link onto the preview
+function peekHover(l, p, onPeek) {
+  if (onPeek) { stayPeek(); return; }
+  if (l && l.dest && !l.url) {
+    if (l === peek.link) { stayPeek(); return; }
+    if (l === peek.want) return;
+    clearTimeout(peek.openTimer);
+    peek.want = l;
+    peek.openTimer = setTimeout(() => { peek.want = null; openPeek(l, p); }, 300);
+    return;
+  }
+  clearTimeout(peek.openTimer);
+  peek.want = null;
+  if (peekOpen() && !peek.closeTimer) peek.closeTimer = setTimeout(closePeek, 200);
+}
+
+function stayPeek() { clearTimeout(peek.closeTimer); peek.closeTimer = 0; }
+
+$('peek').addEventListener('mousedown', e => e.preventDefault());
+$('peek').addEventListener('click', () => { const l = peek.link; closePeek(); if (l) followLink(l); });
+window.addEventListener('scroll', () => { if (peekOpen()) closePeek(); });
 
 // ---------- table of contents ----------
 
@@ -2644,6 +2772,12 @@ function handleKey(e) {
   const k = e.key, lower = k.toLowerCase();
   if (k === 'Shift' || k === 'CapsLock' || k === 'AltGraph') return;
 
+  // an open preview closes on Esc and K before anything else, and on any other key as well
+  if (peekOpen()) {
+    closePeek();
+    if (k === 'Escape' || k === 'K') { e.preventDefault(); return; }
+  }
+
   // the key after i or A in visual mode names a text object
   if (state.mode !== 'normal' && (state.pending === 'i' || state.pending === 'A')) {
     e.preventDefault();
@@ -2790,6 +2924,14 @@ function handleKey(e) {
       return;
     }
     case 'Tab': e.preventDefault(); stepLink(e.shiftKey ? -1 : 1); return;
+    case 'K': {
+      e.preventDefault();
+      const l = cursorLink();
+      if (!l) hint('no link under the cursor (Tab goes to the next link)');
+      else if (!l.dest) hint('the link goes outside the document: no preview');
+      else openPeek(l, state.cursor.p);
+      return;
+    }
     case 'ArrowRight': e.preventDefault(); pageStep(1); return;
     case 'ArrowLeft': e.preventDefault(); pageStep(-1); return;
     case 'PageDown': if (state.single) { e.preventDefault(); pageStep(1); } return;
@@ -2897,7 +3039,7 @@ document.addEventListener('keydown', e => {
 // clicking a highlight selects it
 document.addEventListener('click', e => {
   // a click in the comment list draws the list again, so its target is gone by now
-  if (!e.target.isConnected || e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;
+  if (!e.target.isConnected || e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, #peek, .card')) return;
   // the end of a drag that selected text: it becomes a visual selection (see fromMouse)
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed) return;
@@ -2916,7 +3058,7 @@ document.addEventListener('click', e => {
   if (hit) goItem(itemOf(hit), true); else select(null);
 });
 document.addEventListener('dblclick', e => {
-  if (e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;
+  if (e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, #peek, .card')) return;
   if (state.sel && window.getSelection().isCollapsed) editOrReply(state.sel);
 });
 

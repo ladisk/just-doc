@@ -53,6 +53,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `C` | hide or show the highlights and the link marks on the page, to read the clean text; the selected one stays visible |
 | `n` / `p` | go to the next / previous in the comment list, top to bottom: the answered comments first, then the open ones, then the changes; done comments of earlier rounds are skipped unless `D` shows them; a card shows the reply, your comment and the changes near it (see "What changed"); `gn` / `gN` do the same |
 | `Enter` | follow the link under the cursor (a click on a link does the same); `Tab` / `Shift` `Tab` move the cursor to the next / previous link on the page |
+| `K` | preview the target of the link under the cursor: a crop of the target page in a popup (resting the mouse on a link does the same); a click on the preview goes there, `Esc` or `K` closes it |
 | `Ctrl` `o` / `Ctrl` `i` | jump back to where you were before a jump / forward again |
 | `/` | search the whole PDF: type the text, `Enter`; then `n` / `N` go to the next / previous match and `Esc` ends the search |
 | `t` | table of contents: `j` / `k` move, `Enter` goes there, `Esc` closes |
@@ -149,6 +150,7 @@ the page, and so do `PageDown` and `PageUp`. A selection stays on its page.
 
 Links inside the PDF (a reference to an equation, a citation, an entry of the
 printed contents) are marked with a blue underline and work: put the cursor on one and press `Enter`, or click it.
+To look at the target without going there, rest the mouse on the link or press `K`: a popup shows that part of the target page.
 `Ctrl+o` then returns to the place of the link, with the cursor where it was.
 The same key returns from every other jump: a search, the contents panel,
 `n` / `p`, `gg`, `G`. `Ctrl+i` goes forward again. A web link opens in the

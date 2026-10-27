@@ -1130,8 +1130,10 @@ function owner(m) {
   for (const a of state.annots) {
     if (a.lost || filed.includes(a.id) || a.change !== undefined) continue;
     for (const q of a.rects) for (const r of m.rects) {
-      const d = Math.abs((r.y + r.h / 2) - (q.y + q.h / 2));
-      if (r.p === q.p && d <= 2 * Math.max(r.h, q.h, 8) && d < dist) { best = a; dist = d; }
+      // near in both directions: a change in the next column at the same height is not near
+      const d = Math.abs((r.y + r.h / 2) - (q.y + q.h / 2)), size = Math.max(r.h, q.h, 8);
+      const apart = Math.max(0, r.x - (q.x + q.w), q.x - (r.x + r.w));
+      if (r.p === q.p && d <= 2 * size && apart <= 3 * size && d < dist) { best = a; dist = d; }
     }
   }
   return best;
@@ -1228,6 +1230,15 @@ function goItem(it, stay = false) {
   $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
 }
 
+// where the text line of the rectangle r ends: the words after it that follow with no wide
+// gap, so in a page of two columns the line ends at the edge of its column (PDF points)
+function lineEnd(p, r) {
+  const ws = wordsForPage(p).filter(w => w.y >= r.y && w.y <= r.y + r.h).sort((a, b) => a.x - b.x);
+  let x = r.x + r.w;
+  for (const w of ws) if (w.x + w.w > x && w.x - x < 2.5 * r.h) x = Math.max(x, w.x + w.w);
+  return x;
+}
+
 // the narrowest margin beside the page that the card goes into, in pixels
 const CARD_MARGIN = 300;
 
@@ -1309,13 +1320,19 @@ function showCard() {
     // beyond the page the card would shrink to its narrowest: it takes the width of its text
     card.style.maxWidth = w;
     card.style.width = ed ? w : 'max-content';
-    const top = Math.min(...lines.map(r => r.y)), first = lines.find(r => r.y === top);
-    card.style.top = top * state.scale + 'px';
+    // the bar and the arm follow the comment's own text, not the changes near it
+    // the first block of its lines: a comment in pieces far apart gets no bar across the text between
+    const own = (it.a ? it.a.rects.filter(r => r.p === it.at.p) : lines).sort((a, b) => a.y - b.y)
+      .filter((r, i, rs) => i === 0 || rs.slice(1, i + 1).every((q, k) => q.y - (rs[k].y + rs[k].h) < 1.5 * q.h));
+    const top = Math.min(...own.map(r => r.y)), y = top * state.scale - 3;
+    card.style.top = y - 12 + 'px';
     card.style.left = pg.offsetWidth + gap + 'px';
-    // the bar stands in the page margin, so it crosses no text; the arm leaves it at the first line
-    const x = Math.min(Math.max(...lines.map(r => r.x + r.w)) * state.scale + 6, pg.offsetWidth - 6), link = css => { const d = document.createElement('div'); d.className = 'cardlink'; d.style.cssText = css; pg.appendChild(d); };
-    link(`left:${x}px;top:${top * state.scale}px;width:3px;height:${(Math.max(...lines.map(r => r.y + r.h)) - top) * state.scale}px`);
-    link(`left:${x}px;top:${(first.y + first.h / 2) * state.scale - 1}px;width:${pg.offsetWidth + gap - x}px;height:2px`);
+    // the bar stands where the lines of the comment end in their column, so it covers no word;
+    // the arm runs in the space above the first line, to the card
+    const x = Math.min(Math.max(...own.map(r => lineEnd(it.at.p, r))) * state.scale + 6, pg.offsetWidth - 6);
+    const link = css => { const d = document.createElement('div'); d.className = 'cardlink'; d.style.cssText = css; pg.appendChild(d); };
+    link(`left:${x}px;top:${y}px;width:3px;height:${(Math.max(...own.map(r => r.y + r.h)) - top) * state.scale + 3}px`);
+    link(`left:${x}px;top:${y}px;width:${pg.offsetWidth + gap - x}px;height:2px`);
   } else {
     const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]);
     card.style.top = (low.y + low.h) * state.scale + 6 + 'px';

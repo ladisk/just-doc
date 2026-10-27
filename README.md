@@ -107,12 +107,14 @@ A blue block marks the cursor. It moves as in vim, so no mouse is needed:
 
 A number first repeats the move: `3w`, `5j`. The page scrolls to follow the
 cursor, and when you scroll the page the cursor stays on the screen. A click
-puts the cursor on the clicked word.
+puts the cursor on the clicked character.
 
 `v` starts a selection at the cursor; `V` does the same but selects whole
 lines. The same keys then extend the selection, also onto the next page, and
 `o` switches to its other end. Press `a` to comment on the selection or `s` to
-strike it through. `Esc` cancels.
+strike it through. `Esc` cancels. Text selected with the mouse (a drag, a
+double or a triple click) is the same selection: the cursor is at its end and
+the keys go on from there.
 
 In a selection, `i` and one more key select the thing around the cursor:
 

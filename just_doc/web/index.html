@@ -1947,6 +1947,55 @@ function wordAtPoint(p, x, y) {
   return wordsForPage(p).findIndex(w => x >= w.x - 1 && x <= w.x + w.w + 1 && Math.abs(y - w.y) <= w.h / 2 + 1);
 }
 
+// the character at a point of page p (PDF points): the nearest word on that line, and in it
+// the nearest character; null off the text
+function charAtPoint(p, x, y) {
+  const ws = wordsForPage(p);
+  let i = wordAtPoint(p, x, y);
+  if (i < 0) {
+    let best = Infinity;
+    ws.forEach((w, k) => {
+      const d = x < w.x ? w.x - x : x > w.x + w.w ? x - w.x - w.w : 0;
+      if (Math.abs(y - w.y) <= w.h / 2 + 1 && d < best) { best = d; i = k; }
+    });
+  }
+  if (i < 0) return null;
+  let o = 0;
+  for (let k = 1; k < ws[i].n; k++) if (Math.abs(charX({ p, i, o: k }) - x) < Math.abs(charX({ p, i, o }) - x)) o = k;
+  return { p, i, o };
+}
+
+// A selection made with the mouse (a drag, a double or a triple click) becomes a visual
+// selection, as with v: it starts where the mouse started, the cursor is where it ended,
+// and the keys go on from there.
+function fromMouse() {
+  const sel = window.getSelection();
+  if (state.rectMode || !sel || sel.isCollapsed || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0), box = range.commonAncestorContainer;
+  const el = box.nodeType === 3 ? box.parentNode : box;
+  if (!el.closest('#pages') || el.closest('.card')) return;
+  const rs = [...range.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
+  if (!rs.length) return;
+  const at = (x, y) => {
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const b = pgs[p].getBoundingClientRect();
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return charAtPoint(p, (x - b.left) / state.scale, (y - b.top) / state.scale);
+    }
+    return null;
+  };
+  const first = rs[0], last = rs[rs.length - 1];
+  const a = at(first.left + 1, first.top + first.height / 2), b = at(last.right - 1, last.top + last.height / 2);
+  if (!a || !b) return;
+  const forward = sel.anchorNode === range.startContainer && sel.anchorOffset === range.startOffset;
+  state.anchor = forward ? a : b;
+  state.cursor = forward ? b : a;
+  state.wantX = null;
+  setMode('visual');
+  applyVisual();
+  drawCursor();
+}
+document.addEventListener('mouseup', e => { if (e.button === 0 && !drag) setTimeout(fromMouse, 0); });
+
 function startVisual(mode) {
   if (!placeCursor()) { hint('no text on the screen'); return; }
   state.anchor = { ...state.cursor };
@@ -2809,16 +2858,17 @@ document.addEventListener('keydown', e => {
 document.addEventListener('click', e => {
   // a click in the comment list draws the list again, so its target is gone by now
   if (!e.target.isConnected || e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;
-  if (state.mode !== 'normal') exitVisual();
-  if (state.skipClick || state.rectMode) return;
+  // the end of a drag that selected text: it becomes a visual selection (see fromMouse)
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed) return;
+  if (state.mode !== 'normal') exitVisual();
+  if (state.skipClick || state.rectMode) return;
   const pg = e.target.closest('.pg');
   if (!pg) { select(null); return; }
   const box = pg.getBoundingClientRect();
   const p = +pg.dataset.page, x = (e.clientX - box.left) / state.scale, y = (e.clientY - box.top) / state.scale;
-  const i = wordAtPoint(p, x, y);
-  if (i >= 0) { state.cursor = { p, i, o: 0 }; state.wantX = null; drawCursor(); }
+  const at = charAtPoint(p, x, y);
+  if (at) { state.cursor = at; state.wantX = null; drawCursor(); }
   const link = linkAt(p, x, y);
   if (link) { followLink(link); return; }
   const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === p && x >= r.x - 1 && x <= r.x + r.w + 1

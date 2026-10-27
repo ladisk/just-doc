@@ -32,6 +32,8 @@ const news = {};     // document id -> the number of its comments with a new rep
 const files = {};    // document id -> the state of its file that its viewer shows
 const waits = {};    // document id -> whether a just-doc --wait waits for it
 window.tabWaiting = id => waits[id];
+const pending = {};  // document id -> whether a Ctrl+Enter in it was not taken by a --wait yet
+window.tabPending = id => pending[id];
 let opened = +(sessionStorage.getItem('opened') || -1);   // the last "open" request that was shown
 
 function show(id) {
@@ -91,7 +93,11 @@ function sync(msg) {
     // the file itself was changed: load the document again
     if (t.id in files && files[t.id] !== t.file) frames[t.id].contentWindow.location.reload();
     files[t.id] = t.file;
-    if (waits[t.id] !== t.waiting) { waits[t.id] = t.waiting; frames[t.id].contentWindow.showNews?.(); }
+    if (waits[t.id] !== t.waiting || pending[t.id] !== t.pending) {
+      waits[t.id] = t.waiting;
+      pending[t.id] = t.pending;
+      frames[t.id].contentWindow.showNews?.();
+    }
   }
   for (const id in frames) if (!tabs.some(t => t.id === id)) { frames[id].remove(); delete frames[id]; }
   if (!tabs.length) { draw(); return; }

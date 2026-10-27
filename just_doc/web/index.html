@@ -38,6 +38,7 @@
   #news { display: none; border-radius: 10px; padding: 1px 10px; font-weight: 700; background: #555; color: #ddd; }
   #news.wait, #news.new, #news.agent { display: inline-block; }
   #news.agent { background: #1f7a3a; color: #fff; }
+  #news.lost { display: inline-block; background: #f0a000; color: #222; }
   #news.new { background: #2f7bff; color: #fff; }
   .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
   #pages { padding: calc(var(--bar) + 10px) var(--side) 34px 0; box-sizing: border-box; display: flex; flex-direction: column;
@@ -1386,10 +1387,13 @@ function showNews() {
   if (replies) store.set('waiting', false);
   // a just-doc --wait that waits for this document: the assistant is done and it is your turn
   const agent = !AT && window.parent.tabWaiting?.(DOC);
+  // a hand-over that no --wait has taken: nobody works on it, the assistant has to run --wait
+  const lost = !AT && !agent && window.parent.tabPending?.(DOC);
   const el = $('news');
-  el.className = n ? 'new' : agent ? 'agent' : store.get('waiting', false) ? 'wait' : '';
+  el.className = n ? 'new' : agent ? 'agent' : lost ? 'lost' : store.get('waiting', false) ? 'wait' : '';
   el.textContent = n ? (state.changes ? `${n} to look at · n` : `${n} new ${n > 1 ? 'replies' : 'reply'} · n`)
-    : agent ? 'the assistant waits for your comments · Ctrl+Enter' : 'handed over, waiting for replies …';
+    : agent ? 'the assistant waits for your comments · Ctrl+Enter'
+    : lost ? 'handed over · no assistant has picked it up yet' : 'handed over, waiting for replies …';
   for (const it of $('list').querySelectorAll('.it[data-id]')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
   if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n);
 }

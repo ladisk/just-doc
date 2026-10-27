@@ -206,7 +206,8 @@ The round goes like this:
    and `n` goes through them from the top; a comment that you go to is no
    longer new. While no reply has come, the mark says that the comments are
    handed over; while a `just-doc --wait` waits for you, a green mark says
-   so. The changes in the document are marked too, and come last in
+   so, and an amber one says that no `--wait` has taken your `Ctrl+Enter`
+   yet: the assistant has to run `--wait` again. The changes in the document are marked too, and come last in
    the list (see "What changed").
 4. To answer a reply, press `A` on its card (or on the selected comment),
    write in the field that opens at the bottom of the card, and press

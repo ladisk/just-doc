@@ -89,6 +89,10 @@ Everything goes through these commands; do not edit the .comments.json file.
    command again when it reports that nothing came; a Ctrl+Enter pressed in
    between is kept. Run it in the background if you can.
 
+   Keep a --wait running for as long as the review goes on, and do not end
+   your turn without one: an idle session does not notice a Ctrl+Enter, and
+   the author waits in vain.
+
 2. Read the comments. Each one looks like this:
 
        [3] p. 12  chapter.tex:140
@@ -544,7 +548,9 @@ class Tabs:
                 self.stamp[key] = changed
             self.committed(key, doc)
             tabs.append({"id": key, "name": doc.name, "path": str(doc), "rev": self.rev.get(key, 0),
-                         "file": self.stamp[key], "waiting": self.listens(key)})
+                         "file": self.stamp[key], "waiting": self.listens(key),
+                         # a Ctrl+Enter that no --wait has taken yet
+                         "pending": self.handed.get(key, 0) > self.taken.get(key, 0)})
         return {"tabs": tabs, "focus": self.focus, "opened": self.opened, "quit": self.quit}
 
     def committed(self, key, doc):

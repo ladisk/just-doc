@@ -35,9 +35,9 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 
 | key | action |
 |---|---|
-| `a` | highlight the selection and write a comment, or edit the comment of the selected mark; `Enter` in an empty box leaves a plain highlight |
-| `A` | add a reply to the selected comment (see "Reviewing with a coding assistant") |
-| `gn` / `gN` | go to the next thing to look at since the last hand-over, a new reply or a change / back; a card shows it (see "What changed") |
+| `a` | highlight the selection and write a comment, or edit the comment of the selected mark; once the comment is answered or done, `a` adds a reply instead; `Enter` in an empty box leaves a plain highlight |
+| `A` | reply to the selected comment, the one of the open card or the one under the cursor (see "Reviewing with a coding assistant") |
+| `gn` / `gN` | go to the next / previous comment answered since the last hand-over, or change, starting from where you are; a card shows it (see "What changed") |
 | `D` | show or hide the comments that are done |
 | `m` / `M` | mark what changed since the last hand-over / since the last commit; the same key again hides the marks (see "What changed") |
 | `a` on the card of a change | comment on that change |
@@ -192,15 +192,16 @@ The round goes like this:
 1. The assistant runs `just-doc notes.md --wait`. The window opens.
 2. You write comments and press `Ctrl+Enter`. The message at the bottom says
    whether somebody is waiting for them.
-3. The assistant replies. Each reply shows at once under its comment in the
-   list. A blue mark in the toolbar counts the comments with a new reply, and
-   so do the tab and the title of the window; in the list they are blue.
-   `gn` goes to the next one, and a comment that you go to is no longer new.
+3. The assistant replies. Each reply shows at once in the list. A blue mark
+   in the toolbar counts the comments with a new reply, and so do the tab and
+   the title of the window. `gn` goes to the next answered comment and `gN`
+   back; a comment that you go to is no longer new.
    While no reply has come, the mark says that the comments are handed over.
    The changes in the document are marked too, and `gn` goes through them
    together with the replies (see "What changed").
-4. To answer a reply, select the comment (`n` / `p`), press `A`, write, and
-   press `Ctrl+Enter` again. The box shows the comment and the replies so far.
+4. To answer a reply, press `A` on its card (or on the selected comment),
+   write, and press `Ctrl+Enter` again. The box says whom you reply to and
+   shows the comment and the replies so far.
 5. When you agree, the assistant changes the source. The window loads the new
    version by itself and the comment is marked as done.
 
@@ -283,12 +284,15 @@ lines of it. These are the ones to read first, when an assistant changed more
 than you asked. A comment of the round is an open one, or one that was done
 since your last `Ctrl+Enter`. A change near a comment belongs to it.
 
-`gn` goes to the next thing to look at: a comment with a new reply, or a
-change. A card under it shows your comment, the replies and the changes that
-belong to it, each as a sentence with the old words struck out in red and the
-new ones in green; a change that was not asked for has a card of its own. The
-toolbar counts what is left, and what you have seen fades. `gN` goes back,
-`Esc` closes the card. On the card of a change, `a` comments on the change
+`gn` goes to the next thing to look at, in page order from the selected
+comment or the cursor: a comment that the assistant answered (or marked done)
+since your last `Ctrl+Enter`, or a change. `gN` goes to the one before, so
+`gn` then `gN` comes back to the same place; what you have seen stays in the
+list. A card under it says who replied and what, with your comment above in
+grey, and shows the changes that belong to it, each as a sentence with the old
+words struck out in red and the new ones in green; any other change has a card
+of its own. The card counts where you are ("3 of 7") and what is not seen yet,
+and what you have seen fades. `Esc` closes the card. On the card of a change, `a` comments on the change
 itself: the box and the comment keep the change in view, and `--wait` shows
 the assistant the text as it was before.
 

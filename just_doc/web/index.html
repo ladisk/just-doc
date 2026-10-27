@@ -100,10 +100,13 @@
   .pg .card del { color: #c00000; background: #ffe3e3; text-decoration-thickness: 2px; }
   .pg .card ins { color: #0b5d1e; background: #d4f5d4; text-decoration: none; font-weight: 600; }
   .pg .card .k { margin-top: 4px; font-size: 11px; color: #777; }
-  .pg .card .mine { font-weight: 600; }
-  .pg .card .rep { margin: 2px 0 0 4px; padding-left: 6px; border-left: 2px solid #0050d0; font-size: 13px; }
+  .pg .card .t { font-size: 15px; font-weight: 700; color: #0050d0; }
+  .pg .card .h .n { float: right; margin-left: 12px; }
+  .pg .card .yours { color: #777; font-size: 12px; }
+  .pg .card .yours b, .pg .card .rep.mine b { color: #777; font-weight: 600; }
+  .pg .card .rep { margin: 3px 0 0 4px; padding-left: 6px; border-left: 3px solid #0050d0; white-space: pre-wrap; }
   .pg .card .rep b { color: #0050d0; }
-  .pg .card .rep.mine { border-left-color: #999; }
+  .pg .card .rep.mine { border-left-color: #bbb; color: #666; font-size: 12px; }
   .pg .card .chl { margin-top: 4px; padding-top: 4px; border-top: 1px solid #eee; }
   .pg .card .none { margin-top: 4px; color: #999; font-size: 12px; }
   .pg .card kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font: inherit; }
@@ -122,6 +125,9 @@
   #editor textarea { width: 100%; height: 90px; box-sizing: border-box; border: 0; outline: 0; resize: vertical;
             font: 14px/1.4 system-ui, sans-serif; }
   #editor small { color: #888; }
+  #editor.reply { border-color: #2f7bff; }
+  #etitle { margin-bottom: 4px; font-size: 12px; font-weight: 700; color: #d00000; }
+  #editor.reply #etitle { color: #0050d0; }
   #ethread { display: none; max-height: 40vh; overflow-y: auto; margin-bottom: 6px; padding-bottom: 6px;
              border-bottom: 1px solid #ddd; font-size: 13px; line-height: 1.35; }
   #ethread div { margin-top: 3px; white-space: pre-wrap; }
@@ -130,7 +136,8 @@
   #ethread .state { float: right; margin: 0 0 4px 8px; padding: 0 8px; border-radius: 9px; background: #ffe0b0; color: #7a4300;
                     font-size: 11px; font-weight: 700; }
   #ethread .state.done { background: #c9f2c9; color: #14601f; }
-  #ethread .mine { font-weight: 600; }
+  #ethread .mine { color: #555; }
+  #ethread .mine b { color: #777; }
   #ethread .was { position: sticky; top: 0; clear: both; margin: 0 0 4px; padding: 3px 6px; border-radius: 3px;
                   background: #f1f1f1; color: #555; }
   #ethread .was i { color: #888; }
@@ -201,7 +208,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>gn</kbd> new &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
@@ -210,9 +217,9 @@
   <h2>Keys — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
   <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
   <table>
-    <tr><td><kbd>a</kbd></td><td>comment on the selected text (or edit the comment of the selected mark)</td></tr>
-    <tr><td><kbd>A</kbd></td><td>add a reply to the selected comment</td></tr>
-    <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next thing to look at since the last hand-over (a new reply, a change) / back; a card shows the comment, the replies and the change</td></tr>
+    <tr><td><kbd>a</kbd></td><td>comment on the selected text (or edit the comment of the selected mark; once it is answered: reply)</td></tr>
+    <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
+    <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next / previous comment answered since the last hand-over, or change, from where you are; a card shows the reply, your comment and the change</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
     <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
@@ -259,7 +266,7 @@
     <tr><td><kbd>Esc</kbd></td><td>cancel / deselect</td></tr>
   </table>
 </div></div>
-<div id="editor"><div id="ethread"></div><textarea id="etext" placeholder="comment …"></textarea>
+<div id="editor"><div id="etitle"></div><div id="ethread"></div><textarea id="etext" placeholder="comment …"></textarea>
   <small>Enter saves · Shift+Enter new line · Esc cancels</small></div>
 
 <script type="module">
@@ -575,7 +582,7 @@ function drawList() {
   const list = $('list');
   list.replaceChildren();
   // after a hand-over the list comes in groups: what is new first, what is older last
-  const since = ((AT ? rounds[AT - 1] : rounds[rounds.length - 1]) || 0) * 1000, hhmm = new Date(since).toTimeString().slice(0, 5);
+  const since = roundStart(), hhmm = new Date(since).toTimeString().slice(0, 5);
   const group = a => !since ? 0 : Date.parse(a.created) > since ? 1
     : (a.replies || []).some(r => r.from && Date.parse(r.at) > since) || Date.parse(a.done_at) > since ? 2 : a.done ? 4 : 3;
   const TITLE = AT ? ['', 'written in this round', `answered in round ${AT}`, 'open', 'earlier']
@@ -608,7 +615,7 @@ function drawList() {
       it.append(d);
     }
     it.addEventListener('click', () => { pushJump(); select(a.id); goto(a.rects[0].p, a.rects[0].y); cursorToAnnot(a); });
-    it.addEventListener('dblclick', () => openEditor(a.id));
+    it.addEventListener('dblclick', () => editOrReply(a.id));
     list.appendChild(it);
   }
 }
@@ -1026,32 +1033,55 @@ function owner(m) {
   return best;
 }
 
-// What there is to look at after a round, in page order: each comment with a new reply,
-// together with the changes near it, and each change that no comment asked for.
+// the time of the last hand-over (or the start of the round shown) in ms; 0 before the first
+const roundStart = () => ((AT ? rounds[AT - 1] : rounds[rounds.length - 1]) || 0) * 1000;
+// who spoke last on a comment: the name of the other side, or '' for the author
+const lastFrom = a => (a.replies || []).at(-1)?.from || '';
+// the last reply of the other side
+const theirs = a => (a.replies || []).filter(r => r.from).at(-1);
+// a comment the other side answered in this round, with a reply or a done mark, or one with news not read yet
+const answered = a => isNew(a) || (a.replies || []).some(r => r.from && Date.parse(r.at) > roundStart())
+                      || Date.parse(a.done_at) > roundStart();
+
+// What there is to look at after a round, in page order: each answered comment, together
+// with the changes near it, and each other change. It stays the same while it is read: what
+// was seen stays in it, so gn and gN go through the same list both ways.
 function reviewItems() {
   const items = [], mine = new Map();
   for (const m of state.changes?.marks || []) {
     const a = owner(m);
-    if (!a) items.push({ key: 'm' + m.sig, marks: [m], at: m.rects[0] });
-    else mine.set(a, [...(mine.get(a) || []), m]);
+    if (a && answered(a)) mine.set(a, [...(mine.get(a) || []), m]);
+    else items.push({ key: 'm' + m.sig, marks: [m], near: a, at: m.rects[0] });
   }
   for (const a of state.annots)
-    if (isNew(a) || mine.has(a)) items.push({ key: 'c' + a.id, a, marks: mine.get(a) || [], at: a.rects[0] });
+    if (answered(a)) items.push({ key: 'c' + a.id, a, marks: mine.get(a) || [], at: a.rects[0] });
   return items.sort((x, y) => x.at.p - y.at.p || x.at.y - y.at.y || x.at.x - y.at.x);
 }
 const itemSeen = it => !(it.a && isNew(it.a)) && it.marks.every(m => state.changes.seen.includes(m.sig));
 
-// gn / gN: go to the next thing to look at that was not seen yet / to the one before
+// the order of two places {p, x, y}; on the same line and a point apart they are the same
+const placeOrder = (q, r) => q.p - r.p || (Math.abs(q.y - r.y) > 3 ? q.y - r.y : Math.abs(q.x - r.x) > 1 ? q.x - r.x : 0);
+
+// the place of the cursor; the top of the page in view without one
+function cursorPlace() {
+  const c = state.cursor, w = c && wordsForPage(c.p)[c.i];
+  return w ? { p: c.p, x: w.x, y: w.y - w.h / 2 } : { p: currentPage(), x: 0, y: 0 };
+}
+
+// gn / gN: go to the next / the previous thing to look at, from the selected comment, the
+// card that is open, or else the cursor
 async function stepReview(dir) {
   if (!state.changes && !state.comparing && rounds.length) await showChanges(BASE);
   const items = reviewItems(), n = items.length;
-  if (!n) { hint(rounds.length ? 'nothing new since the last hand-over' : 'no new replies'); return; }
-  const at = items.findIndex(it => it.key === state.item?.key);
-  let next = at < 0 && dir < 0 ? n - 1 : (at + dir + n) % n;
-  if (dir > 0) for (let k = 0; k < n; k++) {
-    const i = (at + 1 + k + n) % n;
-    if (!itemSeen(items[i])) { next = i; break; }
+  if (!n) { hint(rounds.length ? 'nothing answered or changed since the last hand-over' : 'no replies yet'); return; }
+  let next = items.findIndex(it => state.sel ? it.a?.id === state.sel : it.key === state.item?.key);
+  if (next >= 0) next += dir;
+  else {
+    const a = state.annots.find(x => x.id === state.sel), here = a ? a.rects[0] : cursorPlace();
+    next = dir > 0 ? items.findIndex(it => placeOrder(it.at, here) > 0) : items.findLastIndex(it => placeOrder(it.at, here) < 0);
+    if (dir > 0 && next < 0) next = n;
   }
+  if (next < 0 || next >= n) { next = (next + n) % n; hint(dir > 0 ? 'from the first one again' : 'from the last one again'); }
   const it = items[next], c = state.changes;
   if (c) {
     for (const m of it.marks) if (!c.seen.includes(m.sig)) c.seen.push(m.sig);
@@ -1070,41 +1100,44 @@ async function stepReview(dir) {
   showNews();
 }
 
-// the card under what gn went to: the comment with its replies, and the changes that belong to it
+// the card under what gn went to: who answered and what, above it your comment, and the
+// changes that belong to it
 function showCard() {
   document.querySelector('.pg .card')?.remove();
   const it = state.item;
   if (!it || state.oldShown) return;
-  const a = it.a, own = !a, card = document.createElement('div');
-  card.className = 'card' + (own ? ' own' : '');
-  const h = document.createElement('div');
-  h.className = 'h';
-  const left = reviewItems().filter(x => !itemSeen(x)).length;
-  h.append((a ? 'your comment' + (a.done ? ' · done ✓' : ' · open') : 'a change')
-           + (left ? ` · ${left} more to look at` : ' · all seen') + '  ');
-  if (own) h.append(span('b', 'not asked for'));
+  const a = it.a || it.near, card = document.createElement('div');
+  card.className = 'card' + (it.a ? '' : ' own');
+  const items = reviewItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
+  const h = span('div', '', 'h');
+  h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
+  const r = it.a && theirs(it.a);
+  h.append(span('span', it.a ? (r ? r.from + ' replied' : 'done, no reply') + (r && it.a.done ? ' · done ✓' : '')
+                     : it.near ? 'a change near your comment' : 'a change', 't'));
+  if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);
   if (a) {
-    const t = span('div', a.comment || '(no comment)', 'mine');
-    card.append(t);
-    for (const r of (a.replies || []).slice(-3)) {
-      const d = document.createElement('div');
-      d.className = 'rep' + (r.from ? '' : ' mine');
-      if (r.from) d.append(span('b', r.from + ' '));
-      d.append(r.text);
-      card.append(d);
-    }
+    const y = span('div', '', 'yours');
+    y.append(span('b', 'you: '), a.comment || (a.kind === 'strike' ? '(delete)' : '(no comment)'));
+    card.append(y);
+  }
+  const rs = it.a ? it.a.replies || [] : [];
+  if (rs.length > 3) card.append(span('div', `… ${rs.length - 3} earlier`, 'none'));
+  for (const r of rs.slice(-3)) {
+    const d = span('div', '', 'rep' + (r.from ? '' : ' mine'));
+    d.append(span('b', (r.from || 'you') + ': '), r.text);
+    card.append(d);
   }
   for (const m of it.marks) card.append(changeLine(m, span('div', '', 'chl')));
-  if (a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
+  if (it.a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
   const k = document.createElement('div');
   k.className = 'k';
-  k.innerHTML = (AT ? '' : a ? '<kbd>A</kbd> reply &nbsp;' : '<kbd>a</kbd> comment on it &nbsp;')
+  k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;' : '<kbd>a</kbd> comment on it &nbsp;' + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
     + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
   card.append(k);
   // under the lowest line of it on its page, inside the page so it scrolls with it
-  const rs = [...(a ? a.rects : []), ...it.marks.flatMap(m => m.rects)].filter(r => r.p === it.at.p);
-  const low = rs.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), rs[0]), pg = pgs[it.at.p];
+  const lines = [...(it.a ? it.a.rects : []), ...it.marks.flatMap(m => m.rects)].filter(r => r.p === it.at.p);
+  const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]), pg = pgs[it.at.p];
   card.style.top = (low.y + low.h) * state.scale + 6 + 'px';
   pg.appendChild(card);
   card.style.left = Math.max(4, Math.min(it.at.x * state.scale, pg.offsetWidth - card.offsetWidth - 4)) + 'px';
@@ -1359,6 +1392,24 @@ function addFromSelection(kind) {
   return a;
 }
 
+// the comment that a and A act on: the selected one, the one of the card, or the one under the cursor
+function target() {
+  const it = state.item;
+  if (state.sel || it?.a || it?.near) return state.sel || (it.a || it.near).id;
+  const c = state.cursor, w = c && wordsForPage(c.p)[c.i];
+  if (!w) return null;
+  const x = w.x + w.w / 2;
+  return state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === c.p && x >= r.x && x <= r.x + r.w
+                                                         && w.y >= r.y && w.y <= r.y + r.h))?.id || null;
+}
+
+// a comment the other side answered or marked done gets a reply: a change of the comment
+// itself would not reach them
+function editOrReply(id) {
+  const a = state.annots.find(x => x.id === id);
+  if (a) openEditor(id, false, !!(lastFrom(a) || a.done));
+}
+
 // fresh: the highlight was made together with this comment, so Esc removes it again;
 // reply: the box adds a reply to the comment and leaves the comment as it is
 function openEditor(id, fresh = false, reply = false) {
@@ -1371,7 +1422,10 @@ function openEditor(id, fresh = false, reply = false) {
   select(id);
   const last = a.rects[a.rects.length - 1];
   const box = pgs[last.p].getBoundingClientRect();
-  const ed = $('editor');
+  const ed = $('editor'), them = theirs(a);
+  ed.className = reply ? 'reply' : '';
+  $('etitle').textContent = !reply ? (fresh ? 'new comment' : 'edit your comment')
+    : them ? `reply to ${them.from}` : 'add to your comment';
   // a reply is written below what was said so far
   const thread = $('ethread');
   thread.replaceChildren();
@@ -1402,8 +1456,7 @@ function openEditor(id, fresh = false, reply = false) {
   for (const r of reply ? [{ text: a.comment }, ...(a.replies || [])] : []) {
     if (!r.text) continue;
     const d = document.createElement('div'); d.className = r.from ? '' : 'mine';
-    if (r.from) { const b = document.createElement('b'); b.textContent = r.from + ' '; d.append(b); }
-    d.append(r.text);
+    d.append(span('b', (r.from || 'you') + ': '), r.text);
     thread.append(d);
   }
   thread.style.display = thread.children.length ? 'block' : 'none';
@@ -2558,7 +2611,7 @@ function handleKey(e) {
     case 'D': e.preventDefault(); state.archive = !state.archive; drawList(); showNews(); return;
     case 'A':
       e.preventDefault();
-      if (state.sel) openEditor(state.sel, false, true); else hint('go to a comment first (n)');
+      { const id = target(); if (id) openEditor(id, false, true); else hint('go to a comment first (n or gn)'); }
       return;
     case 'P': e.preventDefault(); setSingle(!state.single); return;
     case 'm': case 'M': e.preventDefault(); showChanges(k === 'm' ? BASE : 'commit'); return;
@@ -2587,7 +2640,7 @@ function handleKey(e) {
       e.preventDefault();
       { const a = addFromSelection() || (!state.sel && state.item && !state.item.a && addFromChange());
         if (a) openEditor(a.id, true);
-        else if (state.sel) openEditor(state.sel);
+        else if (target()) editOrReply(target());
         else hint('select text first (v), or go to a comment (n)'); }
       return;
     case 's':
@@ -2681,7 +2734,7 @@ document.addEventListener('keydown', e => {
 // clicking a highlight selects it
 document.addEventListener('click', e => {
   // a click in the comment list draws the list again, so its target is gone by now
-  if (!e.target.isConnected || e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist')) return;
+  if (!e.target.isConnected || e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;
   if (state.mode !== 'normal') exitVisual();
   if (state.skipClick || state.rectMode) return;
   const sel = window.getSelection();
@@ -2694,13 +2747,13 @@ document.addEventListener('click', e => {
   if (i >= 0) { state.cursor = { p, i, o: 0 }; state.wantX = null; drawCursor(); }
   const link = linkAt(p, x, y);
   if (link) { followLink(link); return; }
-  const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => !a.done && a.rects.some(r => r.p === p && x >= r.x - 1 && x <= r.x + r.w + 1
+  const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === p && x >= r.x - 1 && x <= r.x + r.w + 1
                                                              && y >= r.y - 1 && y <= r.y + r.h + 1));
   select(hit ? hit.id : null);
 });
 document.addEventListener('dblclick', e => {
-  if (e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist')) return;
-  if (state.sel && window.getSelection().isCollapsed) openEditor(state.sel);
+  if (e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;
+  if (state.sel && window.getSelection().isCollapsed) editOrReply(state.sel);
 });
 
 // ---------- toolbar ----------

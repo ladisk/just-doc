@@ -75,6 +75,10 @@
   .it .st.read { background: #dbe7ff; color: #0050d0; }
   .it .st.wait { background: #ffe0b0; color: #7a4300; }
   .it .st.done { background: #c9f2c9; color: #14601f; }
+  .it .st.chg { background: #fff; color: #2f7bff; box-shadow: inset 0 0 0 1px #2f7bff; }
+  .it.chg.seen:not(.on) { opacity: .55; }
+  .grp.chgs { cursor: pointer; }
+  .grp.chgs:hover { background: #e0e0db; }
   .it .l2 { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .it .l2 b { color: #0050d0; }
   .it .l2.me b { color: #777; }
@@ -229,7 +233,7 @@
     <tr><td><kbd>a</kbd></td><td>comment on the selected text (or edit the comment of the selected mark; once it is answered: reply)</td></tr>
     <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
     <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next / previous comment answered since the last hand-over, or change, from where you are; a card shows the reply, your comment and the change</td></tr>
-    <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
+    <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list, or on a change the group of changes; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
     <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
@@ -302,7 +306,7 @@ const store = {
 const state = { scale: store.get('scale', 1.5), annots: [], sel: null, undo: [], editing: null,
                 mode: 'normal', cursor: null, anchor: null, pieces: null, pending: '', count: '', wantX: null, find: null, tocAt: 0, single: 0, scaleBefore: 0, cursorTo: null, back: [], fwd: [],
                 // the list: all rows open (zR), rows opened or closed one by one (za), the selected row closed
-                allOpen: false, flip: new Set(), selFolded: false };
+                allOpen: false, flip: new Set(), selFolded: false, chgOpen: false };
 const dpr = window.devicePixelRatio || 1;
 const pagesEl = $('pages');
 const pgs = [];        // 1-based: page element
@@ -600,7 +604,8 @@ const unfolded = a => a.id === state.sel ? !state.selFolded : state.allOpen !== 
 
 // za: open or close the row of the comment at hand; zR / zM: open / close all rows
 function fold(all) {
-  if (all) { state.allOpen = all === 'R'; state.flip.clear(); state.selFolded = !state.allOpen; drawList(); return; }
+  if (all) { state.allOpen = state.chgOpen = all === 'R'; state.flip.clear(); state.selFolded = !state.allOpen; drawList(); return; }
+  if (state.item && !state.item.a && !state.sel) { state.chgOpen = !state.chgOpen; drawList(); return; }
   const id = target();
   if (!id) { hint('go to a comment first (n)'); return; }
   if (id === state.sel) state.selFolded = !state.selFolded;
@@ -658,6 +663,33 @@ function drawList() {
     it.addEventListener('click', () => { pushJump(); select(a.id); goto(a.rects[0].p, a.rects[0].y); cursorToAnnot(a); });
     it.addEventListener('dblclick', () => editOrReply(a.id));
     list.appendChild(it);
+  }
+  drawChangeRows(list);
+}
+
+// Below the comments, the changes that gn goes to on their own, closed to one line: the
+// header and the row that gn is on. za on a change, zR and zM, or a click open and close it.
+function drawChangeRows(list) {
+  const items = state.changes ? reviewItems().filter(it => !it.a) : [];
+  if (!items.length) return;
+  const left = items.filter(it => !itemSeen(it)).length;
+  const h = span('div', `${state.chgOpen ? '▾' : '▸'} ${items.length} change${items.length > 1 ? 's' : ''} without a comment`
+                        + (left ? ` · ${left} not seen` : ' · all seen'), 'grp chgs');
+  h.addEventListener('click', () => { state.chgOpen = !state.chgOpen; drawList(); });
+  list.append(h);
+  for (const it of items) {
+    const on = it.key === state.item?.key;
+    if (!state.chgOpen && !on) continue;
+    const m = it.marks[0], row = document.createElement('div');
+    row.className = 'it chg' + (on ? ' on' : '') + (itemSeen(it) ? ' seen' : '');
+    const l1 = document.createElement('div'); l1.className = 'l1';
+    l1.append(span('span', 'change', 'st chg'), 'p. ' + it.at.p,
+              span('span', m.now ? '«' + m.now + '»' : '(removed) «' + m.was + '»', 'qq'));
+    const l2 = span('div', (it.marks.length > 1 ? `${it.marks.length} changes` : 'one change')
+                           + (it.near ? ' · near your comment' : ' · not asked for'), 'l2 me');
+    row.append(l1, l2);
+    row.addEventListener('click', () => goItem(it));
+    list.append(row);
   }
 }
 
@@ -1129,7 +1161,12 @@ async function stepReview(dir) {
     if (dir > 0 && next < 0) next = n;
   }
   if (next < 0 || next >= n) { next = (next + n) % n; hint(dir > 0 ? 'from the first one again' : 'from the last one again'); }
-  const it = items[next], c = state.changes;
+  goItem(items[next]);
+}
+
+// go to a thing to look at and show its card; a change in it counts as seen
+function goItem(it) {
+  const c = state.changes;
   if (c) {
     for (const m of it.marks) if (!c.seen.includes(m.sig)) c.seen.push(m.sig);
     store.set('chgseen', { ...store.get('chgseen', {}), [c.kind]: c.seen });
@@ -1144,7 +1181,9 @@ async function stepReview(dir) {
   if (state.oldShown) showOld(true);
   showChangeInfo();
   drawHighlights();
+  drawList();
   showNews();
+  $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
 }
 
 // the card under what gn went to: who answered and what, above it your comment, and the
@@ -1277,7 +1316,7 @@ function showNews() {
   const el = $('news');
   el.className = n ? 'new' : store.get('waiting', false) ? 'wait' : '';
   el.textContent = n ? (state.changes ? `${n} to look at · gn` : `${n} new ${n > 1 ? 'replies' : 'reply'} · gn`) : 'handed over, waiting for replies …';
-  for (const it of $('list').querySelectorAll('.it')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
+  for (const it of $('list').querySelectorAll('.it[data-id]')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
   if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n);
 }
 

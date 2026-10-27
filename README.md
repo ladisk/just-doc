@@ -38,7 +38,6 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `a` | highlight the selection and write a comment; on a selected comment, edit it, or once it is answered or done, reply; `Enter` in an empty field leaves a plain highlight |
 | `A` | reply to the selected comment, the one of the open card or the one under the cursor (see "Reviewing with a coding assistant") |
 | `E` | edit your comment; the assistant does not see an edit after it answered, so reply then |
-| `gn` / `gN` | go to the next / previous comment answered since the last hand-over, or change, starting from where you are; a card shows it (see "What changed") |
 | `za` | open or close the row of the comment in the list, or on a change the group of changes; `zR` / `zM` open / close all rows |
 | `D` | show or hide the comments that are done |
 | `m` / `M` | mark what changed since the last hand-over / since the last commit; the same key again hides the marks (see "What changed") |
@@ -52,7 +51,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `u` | undo the last delete |
 | `c` | hide or show the comment list, so the page gets the full width |
 | `C` | hide or show the highlights and the link marks on the page, to read the clean text; the selected one stays visible |
-| `n` / `p` | go to the next / previous comment, starting from the current page; the cursor goes to the start of its text |
+| `n` / `p` | go to the next / previous in the comment list, top to bottom: the answered comments first, then the open ones, then the changes; a card shows the reply, your comment and the changes near it (see "What changed"); `gn` / `gN` do the same |
 | `Enter` | follow the link under the cursor (a click on a link does the same); `Tab` / `Shift` `Tab` move the cursor to the next / previous link on the page |
 | `Ctrl` `o` / `Ctrl` `i` | jump back to where you were before a jump / forward again |
 | `/` | search the whole PDF: type the text, `Enter`; then `n` / `N` go to the next / previous match and `Esc` ends the search |
@@ -198,24 +197,24 @@ The round goes like this:
    whether somebody is waiting for them.
 3. The assistant replies. Each reply shows at once in the list. A blue mark
    in the toolbar counts the comments with a new reply, and so do the tab and
-   the title of the window. `gn` goes to the next answered comment and `gN`
-   back; a comment that you go to is no longer new.
-   While no reply has come, the mark says that the comments are handed over.
-   The changes in the document are marked too, and `gn` goes through them
-   together with the replies (see "What changed").
+   the title of the window. The answered comments come first in the list,
+   and `n` goes through them from the top; a comment that you go to is no
+   longer new. While no reply has come, the mark says that the comments are
+   handed over. The changes in the document are marked too, and come last in
+   the list (see "What changed").
 4. To answer a reply, press `A` on its card (or on the selected comment),
    write in the field that opens at the bottom of the card, and press
    `Ctrl+Enter` again.
+5. When you agree, the assistant changes the source. The window loads the new
+   version by itself and the comment is marked as done.
 
 Each row of the list is two lines: a mark that says where the comment stands
 (new reply, answered, waiting, done, not handed over), the page and the text;
 then who spoke last and what. The selected comment has a red frame and its row
 is open, with the whole conversation; `za` opens or closes a row, `zR` / `zM`
-all of them. Below the comments, one closed line counts the changes that are a
-`gn` stop of their own; the row that `gn` is on shows under it, and `za` on a
+all of them. Below the comments, one closed line counts the changes that have
+no comment; the row that `n` is on shows under it, and `za` on a
 change (or a click on the line) shows them all.
-5. When you agree, the assistant changes the source. The window loads the new
-   version by itself and the comment is marked as done.
 
 ### The commands
 
@@ -296,12 +295,12 @@ lines of it. These are the ones to read first, when an assistant changed more
 than you asked. A comment of the round is an open one, or one that was done
 since your last `Ctrl+Enter`. A change near a comment belongs to it.
 
-`gn` goes to the next thing to look at, in page order from the selected
-comment or the cursor: a comment that the assistant answered (or marked done)
-since your last `Ctrl+Enter`, or a change; changes a few lines apart on one
-page are one stop, with a card that lists them. `gN` goes to the one before, so
-`gn` then `gN` comes back to the same place; what you have seen stays in the
-list. A card under it says who replied and what, with your comment above in
+`n` and `p` go through the comment list as it is shown, from the selected
+comment (or the first one after the cursor): the comments that the assistant
+answered (or marked done) since your last `Ctrl+Enter`, the open ones, the
+older ones, and last the changes that have no comment; changes a few lines
+apart on one page are one stop, with a card that lists them. `n` then `p`
+comes back to the same place. A card under it says who replied and what, with your comment above in
 grey, and shows the changes that belong to it, each as a sentence with the old
 words struck out in red and the new ones in green; the other changes have
 cards of their own, which name your comment only when it is still open. The card counts where you are ("3 of 7") and what is not seen yet,

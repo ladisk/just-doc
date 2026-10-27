@@ -208,7 +208,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
@@ -220,7 +220,6 @@
     <tr><td><kbd>a</kbd></td><td>comment on the selected text; on a comment: reply once it is answered, else edit it</td></tr>
     <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
     <tr><td><kbd>E</kbd></td><td>edit your comment; the other side does not see the change, so after an answer reply instead</td></tr>
-    <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next / previous comment answered since the last hand-over, or change, from where you are; a card shows the reply, your comment and the change</td></tr>
     <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list, or on a change the group of changes; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
@@ -235,7 +234,7 @@
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
     <tr><td><kbd>C</kbd></td><td>hide or show the highlights on the page</td></tr>
-    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous comment</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>follow the link under the cursor; <kbd>Tab</kbd> moves the cursor to the next link</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again</td></tr>
     <tr><td><kbd>/</kbd></td><td>search the whole PDF; <kbd>Enter</kbd> starts it</td></tr>
@@ -607,21 +606,27 @@ function fold(all) {
   $('list').querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
+// after a hand-over the list comes in groups: what is new first, what is older last;
+// 0 before the first hand-over. The comments are in page order inside a group.
+function groupOf(a) {
+  const since = roundStart();
+  return !since ? 0 : Date.parse(a.created) > since ? 1
+    : (a.replies || []).some(r => r.from && Date.parse(r.at) > since) || Date.parse(a.done_at) > since ? 2 : a.done ? 4 : 3;
+}
+const listOrder = () => state.annots.filter(listed).map(a => [groupOf(a), a]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+
 function drawList() {
-  const shown = state.annots.filter(listed), hidden = state.annots.length - shown.length;
+  const shown = listOrder(), hidden = state.annots.length - shown.length;
   $('count').textContent = state.annots.filter(a => !a.done).length;
   $('archive').textContent = state.archive ? '· with the done ones · D hides them' : hidden ? `· ${hidden} done · D shows them` : '';
   const list = $('list');
   list.replaceChildren();
-  // after a hand-over the list comes in groups: what is new first, what is older last
-  const since = roundStart(), hhmm = new Date(since).toTimeString().slice(0, 5);
-  const group = a => !since ? 0 : Date.parse(a.created) > since ? 1
-    : (a.replies || []).some(r => r.from && Date.parse(r.at) > since) || Date.parse(a.done_at) > since ? 2 : a.done ? 4 : 3;
+  const hhmm = new Date(roundStart()).toTimeString().slice(0, 5);
   const TITLE = AT ? ['', 'written in this round', `answered in round ${AT}`, 'open', 'earlier']
     : ['', 'new, not handed over yet', `answered since your Ctrl+Enter at ${hhmm}`, 'open', 'earlier'];
   let last = -1;
-  for (const a of shown.map(a => [group(a), a]).sort((x, y) => x[0] - y[0]).map(x => x[1])) {
-    const g = group(a);
+  for (const a of shown) {
+    const g = groupOf(a);
     if (g !== last && g) list.append(span('div', TITLE[g], 'grp' + (g === 4 ? ' old' : '')));
     last = g;
     const it = document.createElement('div');
@@ -660,8 +665,8 @@ function drawList() {
   drawChangeRows(list);
 }
 
-// Below the comments, the changes that gn goes to on their own, closed to one line: the
-// header and the row that gn is on. za on a change, zR and zM, or a click open and close it.
+// Below the comments, the changes that n goes to on their own, closed to one line: the
+// header and the row that n is on. za on a change, zR and zM, or a click open and close it.
 function drawChangeRows(list) {
   const items = state.changes ? reviewItems().filter(it => !it.a) : [];
   if (!items.length) return;
@@ -1038,7 +1043,7 @@ async function showChanges(kind, fresh = false) {
           m.cut = true;
         }
       }
-      // a change that gn went to is "seen"; what the list holds of older rounds is dropped
+      // a change that n went to is "seen"; what the list holds of older rounds is dropped
       const kept = marks.filter(m => m.rects.length), all = store.get('chgseen', {});
       const seen = (all[kind] || []).filter(g => kept.some(m => m.sig === g));
       store.set('chgseen', { ...all, [kind]: seen });
@@ -1111,7 +1116,7 @@ const answered = a => isNew(a) || (a.replies || []).some(r => r.from && Date.par
 
 // What there is to look at after a round, in page order: each answered comment, together
 // with the changes near it, and the other changes, a stretch of text at a time. It stays the
-// same while it is read: what was seen stays in it, so gn and gN go through it both ways.
+// same while it is read: what was seen stays in it, so n and p go through it both ways.
 function reviewItems() {
   const items = [], mine = new Map();
   let block = null;
@@ -1140,21 +1145,29 @@ function cursorPlace() {
   return w ? { p: c.p, x: w.x, y: w.y - w.h / 2 } : { p: currentPage(), x: 0, y: 0 };
 }
 
-// gn / gN: go to the next / the previous thing to look at, from the selected comment, the
-// card that is open, or else the cursor
-async function stepReview(dir) {
-  if (!state.changes && !state.comparing && rounds.length) await showChanges(BASE);
-  const items = reviewItems(), n = items.length;
-  if (!n) { hint(rounds.length ? 'nothing answered or changed since the last hand-over' : 'no replies yet'); return; }
+// What n and p go through: the list as it is shown, from the top. The comments in their groups,
+// each with the changes near it when it was answered, then the changes on their own.
+function navItems() {
+  const review = reviewItems(), marks = new Map(review.filter(it => it.a).map(it => [it.a.id, it.marks]));
+  return [...listOrder().map(a => ({ key: 'c' + a.id, a, marks: marks.get(a.id) || [], at: a.rects[0] })),
+          ...review.filter(it => !it.a)];
+}
+
+// n / p (and gn / gN): go to the next / previous one, from the selected comment, the card
+// that is open, or else the first one after the cursor; at the end it starts again
+function stepAnnot(dir) {
+  const items = navItems(), n = items.length;
+  if (!n) { hint('no comments'); return; }
   let next = items.findIndex(it => state.sel ? it.a?.id === state.sel : it.key === state.item?.key);
   if (next >= 0) next += dir;
   else {
-    const a = state.annots.find(x => x.id === state.sel), here = a ? a.rects[0] : cursorPlace();
-    next = dir > 0 ? items.findIndex(it => placeOrder(it.at, here) > 0) : items.findLastIndex(it => placeOrder(it.at, here) < 0);
-    if (dir > 0 && next < 0) next = n;
+    const here = cursorPlace();
+    next = items.findIndex(it => placeOrder(it.at, here) >= 0);
+    if (next < 0) next = 0;
+    else if (dir < 0) next--;
   }
-  if (next < 0 || next >= n) { next = (next + n) % n; hint(dir > 0 ? 'from the first one again' : 'from the last one again'); }
-  goItem(items[next]);
+  hint(next < 0 || next >= n ? (dir > 0 ? 'from the first one again' : 'from the last one again') : '');
+  goItem(items[(next + n) % n]);
 }
 
 // go to a thing to look at and show its card; a change in it counts as seen
@@ -1179,7 +1192,7 @@ function goItem(it) {
   $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
 }
 
-// The card: one box for a comment and what belongs to it, under its text. gn shows it with
+// The card: one box for a comment and what belongs to it, under its text. n shows it with
 // the reply, your comment and the changes near it; a, A and E add the field at its bottom.
 function showCard() {
   // the field is taken out of the old card first, or it goes with it
@@ -1189,7 +1202,7 @@ function showCard() {
   document.querySelector('.pg .card')?.remove();
   state.drawing = false;
   const ed = state.editing && state.annots.find(x => x.id === state.editing);
-  // a comment that is written now has the card of gn if that is its own, or one of its own
+  // a comment that is written now has the card of n if that is its own, or one of its own
   let it = state.item;
   if (ed && it?.a?.id !== ed.id) {
     // a comment on a change keeps the change in view
@@ -1202,7 +1215,7 @@ function showCard() {
   card.className = 'card' + (it.a ? '' : ' own') + (ed ? ' editing' : '');
   const h = span('div', '', 'h');
   if (it.key) {
-    const items = reviewItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
+    const items = navItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
     h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
   }
   const r = it.a && theirs(it.a);
@@ -1229,7 +1242,7 @@ function showCard() {
   }
   for (const m of it.marks.slice(0, 4)) card.append(changeLine(m, span('div', '', 'chl')));
   if (it.marks.length > 4) card.append(span('div', `… and ${it.marks.length - 4} more changes here`, 'none'));
-  if (it.key && it.a && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
+  if (it.key && it.a && answered(it.a) && !it.marks.length && state.changes) card.append(span('div', 'no change near it', 'none'));
   if (ed) {
     card.append(field);
     // a click on the card leaves the field open
@@ -1239,7 +1252,7 @@ function showCard() {
     k.className = 'k';
     k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;'
                          : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
-      + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
+      + '<kbd>n</kbd> next &nbsp;<kbd>p</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
     card.append(k);
   }
   // under the lowest line of it on its page, inside the page so it scrolls with it
@@ -1251,7 +1264,7 @@ function showCard() {
   if (had && ed) $('etext').focus();
 }
 
-// a on a change that gn went to: a comment on the change; it keeps the text as it was, for
+// a on a change that n went to: a comment on the change; it keeps the text as it was, for
 // the author of the change
 function addFromChange() {
   const m = state.item.marks[0];
@@ -1331,12 +1344,12 @@ const isNew = a => outside(a) > (looked[a.id] || 0);
 // the mark in the toolbar, in the list, on the tab and in the title of the window
 function showNews() {
   const replies = state.annots.filter(isNew).length;
-  // with the changes marked, gn goes through them too
+  // with the changes marked, n goes through them too
   const n = state.changes ? reviewItems().filter(it => !itemSeen(it)).length : replies;
   if (replies) store.set('waiting', false);
   const el = $('news');
   el.className = n ? 'new' : store.get('waiting', false) ? 'wait' : '';
-  el.textContent = n ? (state.changes ? `${n} to look at · gn` : `${n} new ${n > 1 ? 'replies' : 'reply'} · gn`) : 'handed over, waiting for replies …';
+  el.textContent = n ? (state.changes ? `${n} to look at · n` : `${n} new ${n > 1 ? 'replies' : 'reply'} · n`) : 'handed over, waiting for replies …';
   for (const it of $('list').querySelectorAll('.it[data-id]')) it.classList.toggle('new', isNew(state.annots.find(a => a.id === it.dataset.id)));
   if (window.parent !== window && !AT) window.parent.tabNews?.(DOC, n);
 }
@@ -1352,7 +1365,7 @@ function markSeen(id) {
 function select(id) {
   if (id !== state.sel) state.selFolded = false;
   state.sel = id;
-  // the card of gn goes when something else is selected
+  // the card goes when something else is selected
   if (state.item && !(id && state.item.a?.id === id)) { state.item = null; showCard(); }
   if (id) markSeen(id);
   drawHighlights();
@@ -1583,7 +1596,7 @@ window.reloadAnnots = async () => {
     showNews();
     $('list').querySelector('.on')?.scrollIntoView({ block: 'nearest' });
     const n = state.annots.filter(isNew).length;
-    if (n > before) toast(`${n} new ${n > 1 ? 'replies' : 'reply'} — gn goes to the next one`);
+    if (n > before) toast(`${n} new ${n > 1 ? 'replies' : 'reply'} — n goes to the next one`);
   } catch (err) { console.error('reading the comments again failed', err); }
 };
 
@@ -1663,26 +1676,6 @@ $('hq').addEventListener('keydown', e => {
 function scrollByPx(px) { window.scrollBy(0, px); }
 function scrollTop() { if (state.single) goto(1); else window.scrollTo(0, 0); }
 function scrollBottom() { if (state.single) goto(pdf.numPages); else window.scrollTo(0, pagesEl.scrollHeight); }
-
-// step to the next (dir 1) or previous (dir -1) comment, wrapping around;
-// without a selected comment it starts from the current page
-function stepAnnot(dir) {
-  const all = state.annots.filter(listed), n = all.length;
-  if (!n) { hint('no comments'); return; }
-  let j = all.findIndex(a => a.id === state.sel);
-  if (j >= 0) j = (j + dir + n) % n;
-  else {
-    const cur = currentPage();
-    if (dir > 0) { j = all.findIndex(a => a.rects[0].p >= cur); if (j < 0) j = 0; }
-    else { j = n - 1; while (j > 0 && all[j].rects[0].p > cur) j--; }
-  }
-  const a = all[j];
-  pushJump();
-  select(a.id);
-  goto(a.rects[0].p, a.rects[0].y);
-  cursorToAnnot(a);
-  hint(`comment ${j + 1} of ${n}`);
-}
 
 // ---------- visual mode ----------
 // A position is {p, i, o}: page, word index and character offset in the word. Words are
@@ -2640,7 +2633,7 @@ function handleKey(e) {
     e.preventDefault();
     state.pending = state.count = '';
     hint('');
-    if (k === 'b') toggleOld(); else if (k === 'h') toggleHistory(); else stepReview(k === 'n' ? 1 : -1);
+    if (k === 'b') toggleOld(); else if (k === 'h') toggleHistory(); else stepAnnot(k === 'n' ? 1 : -1);
     return;
   }
   const n = parseInt(state.count, 10) || 0;
@@ -2678,11 +2671,11 @@ function handleKey(e) {
     case 'D': e.preventDefault(); state.archive = !state.archive; drawList(); showNews(); return;
     case 'A':
       e.preventDefault();
-      { const id = target(); if (id) openEditor(id, false, true); else hint('go to a comment first (n or gn)'); }
+      { const id = target(); if (id) openEditor(id, false, true); else hint('go to a comment first (n)'); }
       return;
     case 'E':
       e.preventDefault();
-      { const id = target(); if (id) openEditor(id); else hint('go to a comment first (n or gn)'); }
+      { const id = target(); if (id) openEditor(id); else hint('go to a comment first (n)'); }
       return;
     case 'P': e.preventDefault(); setSingle(!state.single); return;
     case 'm': case 'M': e.preventDefault(); showChanges(k === 'm' ? BASE : 'commit'); return;

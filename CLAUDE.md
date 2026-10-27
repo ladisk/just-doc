@@ -49,7 +49,11 @@ uv run just-doc book.pdf --read   # print the comments
 uv run just-doc book.pdf --export # write book.commented.pdf
 ```
 
-There are no automated tests; check changes by running the tool on a PDF.
+```bash
+node tests/smoke.mjs              # smoke test in headless Chromium, see tests/README.md
+```
+
+There are no other automated tests; check changes by running the tool on a PDF.
 
 ## Documentation
 

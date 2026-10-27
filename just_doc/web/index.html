@@ -656,7 +656,7 @@ function drawList() {
       d.append(r.text);
       it.append(d);
     }
-    it.addEventListener('click', () => { pushJump(); select(a.id); goto(a.rects[0].p, a.rects[0].y); cursorToAnnot(a); });
+    it.addEventListener('click', () => goItem(itemOf(a)));
     it.addEventListener('dblclick', () => editOrReply(a.id));
     list.appendChild(it);
   }
@@ -1174,20 +1174,21 @@ function stepAnnot(dir) {
   goItem(items[(next + n) % n]);
 }
 
-// go to a thing to look at and show its card; a change in it counts as seen
-function goItem(it) {
+// a comment as n and p see it, for a click on it; one that n skips gets a card too
+const itemOf = a => navItems().find(it => it.a?.id === a.id) || { key: 'c' + a.id, a, marks: [], at: a.rects[0] };
+
+// go to a thing to look at and show its card (stay: a click on the page, which does not scroll); a change in it counts as seen
+function goItem(it, stay = false) {
   const c = state.changes;
   if (c) {
     for (const m of it.marks) if (!c.seen.includes(seenKey(m))) c.seen.push(seenKey(m));
     store.set('chgseen', { ...store.get('chgseen', {}), [c.kind]: c.seen });
   }
-  pushJump();
-  goto(it.at.p, it.at.y);
+  if (!stay) { pushJump(); goto(it.at.p, it.at.y); }
   if (it.a) select(it.a.id);
   else select(null);
   state.item = it;
-  if (it.a) cursorToAnnot(it.a);
-  else cursorToAnnot(it.marks[0]);
+  if (!stay) cursorToAnnot(it.a || it.marks[0]);
   if (state.oldShown) showOld(true);
   showChangeInfo();
   drawHighlights();
@@ -1224,7 +1225,8 @@ function showCard() {
   const h = span('div', '', 'h');
   if (it.key) {
     const items = navItems(), at = items.findIndex(x => x.key === it.key), left = items.filter(x => !itemSeen(x)).length;
-    h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
+    // a done comment of an earlier round, clicked, is not among them: no place to count
+    if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}` + (left ? ` · ${left} not seen yet` : ' · all seen'), 'n'));
   }
   const r = it.a && theirs(it.a);
   h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'
@@ -2911,7 +2913,7 @@ document.addEventListener('click', e => {
   if (link) { followLink(link); return; }
   const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === p && x >= r.x - 1 && x <= r.x + r.w + 1
                                                              && y >= r.y - 1 && y <= r.y + r.h + 1));
-  select(hit ? hit.id : null);
+  if (hit) goItem(itemOf(hit), true); else select(null);
 });
 document.addEventListener('dblclick', e => {
   if (e.target.closest('#side, #editor, #bar, #foot, #help, #toc, #hist, .card')) return;

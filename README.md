@@ -51,7 +51,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `u` | undo the last delete |
 | `c` | hide or show the comment list, so the page gets the full width |
 | `C` | hide or show the highlights and the link marks on the page, to read the clean text; the selected one stays visible |
-| `n` / `p` | go to the next / previous in the comment list, top to bottom: the answered comments first, then the open ones, then the changes; a card shows the reply, your comment and the changes near it (see "What changed"); `gn` / `gN` do the same |
+| `n` / `p` | go to the next / previous in the comment list, top to bottom: the answered comments first, then the open ones, then the changes; done comments of earlier rounds are skipped unless `D` shows them; a card shows the reply, your comment and the changes near it (see "What changed"); `gn` / `gN` do the same |
 | `Enter` | follow the link under the cursor (a click on a link does the same); `Tab` / `Shift` `Tab` move the cursor to the next / previous link on the page |
 | `Ctrl` `o` / `Ctrl` `i` | jump back to where you were before a jump / forward again |
 | `/` | search the whole PDF: type the text, `Enter`; then `n` / `N` go to the next / previous match and `Esc` ends the search |
@@ -300,8 +300,9 @@ since your last `Ctrl+Enter`. A change near a comment belongs to it.
 
 `n` and `p` go through the comment list as it is shown, from the selected
 comment (or the first one after the cursor): the comments that the assistant
-answered (or marked done) since your last `Ctrl+Enter`, the open ones, the
-older ones, and last the changes that have no comment; changes a few lines
+answered (or marked done) since your last `Ctrl+Enter`, the open ones, and
+last the changes that have no comment. The comments that were done before
+that are skipped, unless `D` shows them; changes a few lines
 apart on one page are one stop, with a card that lists them. `n` then `p`
 comes back to the same place. A card under it says who replied and what, with your comment above in
 grey, and shows the changes that belong to it, each as a sentence with the old

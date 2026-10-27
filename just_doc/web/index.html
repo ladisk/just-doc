@@ -235,7 +235,7 @@
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
     <tr><td><kbd>C</kbd></td><td>hide or show the highlights on the page</td></tr>
-    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; done ones of earlier rounds are skipped unless <kbd>D</kbd> shows them; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>follow the link under the cursor; <kbd>Tab</kbd> moves the cursor to the next link</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again</td></tr>
     <tr><td><kbd>/</kbd></td><td>search the whole PDF; <kbd>Enter</kbd> starts it</td></tr>
@@ -1148,9 +1148,11 @@ function cursorPlace() {
 
 // What n and p go through: the list as it is shown, from the top. The comments in their groups,
 // each with the changes near it when it was answered, then the changes on their own.
+// What was done before this round is skipped, unless D shows it: it has nothing new to read.
 function navItems() {
   const review = reviewItems(), marks = new Map(review.filter(it => it.a).map(it => [it.a.id, it.marks]));
-  return [...listOrder().map(a => ({ key: 'c' + a.id, a, marks: marks.get(a.id) || [], at: a.rects[0] })),
+  const shown = listOrder().filter(a => groupOf(a) !== 4 || state.archive || a.id === state.sel);
+  return [...shown.map(a => ({ key: 'c' + a.id, a, marks: marks.get(a.id) || [], at: a.rects[0] })),
           ...review.filter(it => !it.a)];
 }
 
@@ -1158,7 +1160,7 @@ function navItems() {
 // that is open, or else the first one after the cursor; at the end it starts again
 function stepAnnot(dir) {
   const items = navItems(), n = items.length;
-  if (!n) { hint('no comments'); return; }
+  if (!n) { hint(state.annots.length ? 'nothing open · D shows the done ones' : 'no comments'); return; }
   let next = items.findIndex(it => state.sel ? it.a?.id === state.sel : it.key === state.item?.key);
   if (next >= 0) next += dir;
   else {

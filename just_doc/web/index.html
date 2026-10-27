@@ -1555,6 +1555,14 @@ function openEditor(id, fresh = false, reply = false) {
   left = Math.max(8, Math.min(left, window.innerWidth - $('side').offsetWidth - 400));
   const room = ed.offsetHeight + 30;
   if (top > window.innerHeight - room || top < 50) top = Math.max(60, window.innerHeight - room - 20);
+  // the card of gn shows the same conversation: the box takes its place while it is open
+  const card = document.querySelector('.pg .card');
+  if (card) {
+    const r = card.getBoundingClientRect();
+    left = Math.max(8, Math.min(r.left, window.innerWidth - $('side').offsetWidth - ed.offsetWidth - 8));
+    top = Math.max(60, Math.min(r.top, window.innerHeight - room - 20));
+    card.style.visibility = 'hidden';
+  }
   ed.style.left = left + 'px';
   ed.style.top = top + 'px';
   $('etext').value = reply ? '' : a.comment;
@@ -1586,13 +1594,15 @@ function closeEditor(commit) {
     save();
   }
   $('etext').blur();
+  showCard();
 }
 
 $('etext').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); closeEditor(true); }
   else if (e.key === 'Escape') { e.preventDefault(); closeEditor(false); }
 });
-$('etext').addEventListener('blur', () => closeEditor(true));
+// a click elsewhere in the page saves and closes the box; going to another window does not
+$('etext').addEventListener('blur', () => { if (document.hasFocus()) closeEditor(true); });
 
 // the comments were changed from outside (a reply came in): read them again
 window.reloadAnnots = async () => {

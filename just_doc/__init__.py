@@ -159,6 +159,24 @@ def find_comment(doc, annots, ref):
     raise RuntimeError(f"no comment {ref} in {comments_path(doc).name}")
 
 
+def now_stamp():
+    """Return the current UTC time as ``YYYY-MM-DDTHH:MM:SS.mmmZ``, as the window writes it."""
+    t = time.time()
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) + f".{int(t % 1 * 1000):03d}Z"
+
+
+def stamp_key(stamp):
+    """Return a sort key for a time stamp with or without milliseconds.
+
+    A missing or unreadable stamp sorts first.
+    """
+    try:
+        m = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z?", stamp)
+        return (time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S"), int((m.group(2) or "0")[:3].ljust(3, "0")))
+    except (TypeError, AttributeError, ValueError):
+        return (time.gmtime(0), -1)
+
+
 def answer(doc, ref, text, name):
     """Add a reply to the comment ``ref``; without a text mark the comment as done."""
     with WRITING:
@@ -166,10 +184,10 @@ def answer(doc, ref, text, name):
         a = find_comment(doc, annots, ref)
         if text is None:
             a["done"] = True
-            a["done_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            a["done_at"] = now_stamp()
         else:
             a.setdefault("replies", []).append(
-                {"from": name, "text": text, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                {"from": name, "text": text, "at": now_stamp()})
         save_comments(doc, annots)
 
 
@@ -184,7 +202,7 @@ def keep_replies(doc, annots):
         was = old.get(a.get("id"), {})
         missing = [r for r in was.get("replies", []) if r not in a.get("replies", [])]
         if missing:
-            a["replies"] = sorted(a.get("replies", []) + missing, key=lambda r: r.get("at", ""))
+            a["replies"] = sorted(a.get("replies", []) + missing, key=lambda r: stamp_key(r.get("at")))
         # the window sets done to false when the author answers a comment that was done
         if was.get("done") and "done" not in a:
             a["done"] = True

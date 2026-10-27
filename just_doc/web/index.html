@@ -1195,7 +1195,10 @@ function goItem(it) {
   $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
 }
 
-// The card: one box for a comment and what belongs to it, under its text. n shows it with
+// the narrowest margin beside the page that the card goes into, in pixels
+const CARD_MARGIN = 300;
+
+// The card: one box for a comment and what belongs to it, beside or under its text. n shows it with
 // the reply, your comment and the changes near it; a, A and E add the field at its bottom.
 function showCard() {
   // the field is taken out of the old card first, or it goes with it
@@ -1258,12 +1261,26 @@ function showCard() {
       + '<kbd>n</kbd> next &nbsp;<kbd>p</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
     card.append(k);
   }
-  // under the lowest line of it on its page, inside the page so it scrolls with it
+  // inside the page, so it scrolls with it: beside the page, level with the first line of it,
+  // when the margin up to the comment list is wide enough; else under the lowest line, where
+  // it covers the text that follows
   const lines = [...(it.a ? it.a.rects : []), ...it.marks.flatMap(m => m.rects || [])].filter(r => r.p === it.at.p);
-  const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]), pg = pgs[it.at.p];
-  card.style.top = (low.y + low.h) * state.scale + 6 + 'px';
+  const pg = pgs[it.at.p], gap = 10;
+  const margin = document.documentElement.clientWidth - $('side').offsetWidth - pg.getBoundingClientRect().right - 2 * gap;
   pg.appendChild(card);
-  card.style.left = Math.max(4, Math.min(it.at.x * state.scale, pg.offsetWidth - card.offsetWidth - 4)) + 'px';
+  if (margin >= CARD_MARGIN) {
+    // the card is content-box: its padding and border come on top of the width
+    const w = Math.min(460, margin - (card.offsetWidth - card.clientWidth) - 18) + 'px';
+    // beyond the page the card would shrink to its narrowest: it takes the width of its text
+    card.style.maxWidth = w;
+    card.style.width = ed ? w : 'max-content';
+    card.style.top = Math.min(...lines.map(r => r.y)) * state.scale + 'px';
+    card.style.left = pg.offsetWidth + gap + 'px';
+  } else {
+    const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]);
+    card.style.top = (low.y + low.h) * state.scale + 6 + 'px';
+    card.style.left = Math.max(4, Math.min(it.at.x * state.scale, pg.offsetWidth - card.offsetWidth - 4)) + 'px';
+  }
   if (had && ed) $('etext').focus();
 }
 
@@ -1670,7 +1687,10 @@ function toggleSide() {
   const off = document.body.classList.toggle('no-side');
   store.set('noSide', off);
   hint(off ? 'comment list hidden (c shows it)' : '');
+  // the margin beside the page changes, and with it the place of the card
+  showCard();
 }
+addEventListener('resize', () => { if (state.item || state.editing) showCard(); });
 // hides the highlights to read the clean page; the selected one stays visible
 function toggleHl() { document.body.classList.toggle('no-hl'); setMode(state.mode); }
 function toggleHelp() {

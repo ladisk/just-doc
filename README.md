@@ -304,7 +304,7 @@ answered (or marked done) since your last `Ctrl+Enter`, the open ones, and
 last the changes that have no comment. The comments that were done before
 that are skipped, unless `D` shows them; changes a few lines
 apart on one page are one stop, with a card that lists them. `n` then `p`
-comes back to the same place. A card under it says who replied and what, with your comment above in
+comes back to the same place. A card beside the page (under the text when the margin is narrow) says who replied and what, with your comment above in
 grey, and shows the changes that belong to it, each as a sentence with the old
 words struck out in red and the new ones in green; the other changes have
 cards of their own, which name your comment only when it is still open. The card counts where you are ("3 of 7") and what is not seen yet,

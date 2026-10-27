@@ -54,7 +54,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `n` / `p` | go to the next / previous in the comment list, top to bottom: the answered comments first, then the open ones, then the changes; done comments of earlier rounds are skipped unless `D` shows them; a card shows the reply, your comment and the changes near it (see "What changed"); `gn` / `gN` do the same |
 | `Enter` | follow the link under the cursor (a click on a link does the same); `Tab` / `Shift` `Tab` move the cursor to the next / previous link on the page |
 | `K` | preview the target of the link under the cursor: a crop of the target page in a popup (resting the mouse on a link does the same); `j` / `k` or the mouse wheel scroll it within the target page, a click on it goes there, `Esc` or `K` closes it |
-| `Ctrl` `o` / `Ctrl` `i` | jump back to where you were before a jump / forward again |
+| `Ctrl` `o` / `Ctrl` `i` | jump back to where you were before a jump / forward again; the back / forward buttons of the mouse do the same |
 | `/` | search the whole PDF: type the text, `Enter`; then `n` / `N` go to the next / previous match and `Esc` ends the search |
 | `t` | table of contents: `j` / `k` move, `Enter` goes there, `Esc` closes |
 | `h` `j` `k` `l`, `w` `b` `e`, `0` `$` | move the cursor (see below); the page follows it |

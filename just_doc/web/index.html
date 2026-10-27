@@ -245,7 +245,7 @@
     <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous in the comment list, from the top: what was answered first, then the open ones, then the changes; done ones of earlier rounds are skipped unless <kbd>D</kbd> shows them; a card shows the reply, your comment and the change (<kbd>gn</kbd> / <kbd>gN</kbd> do the same)</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>follow the link under the cursor; <kbd>Tab</kbd> moves the cursor to the next link</td></tr>
     <tr><td><kbd>K</kbd></td><td>preview the target of the link under the cursor (resting the mouse on a link does the same); <kbd>j</kbd> / <kbd>k</kbd> or the wheel scroll it within the page, a click on it goes there, <kbd>Esc</kbd> or <kbd>K</kbd> closes it</td></tr>
-    <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>o</kbd> / <kbd>i</kbd></td><td>jump back to where you were / forward again; the back / forward buttons of the mouse do the same</td></tr>
     <tr><td><kbd>/</kbd></td><td>search the whole PDF; <kbd>Enter</kbd> starts it</td></tr>
     <tr class="sub"><td><kbd>n</kbd> / <kbd>N</kbd></td><td>next / previous match, while a search is active</td></tr>
     <tr class="sub"><td><kbd>Esc</kbd></td><td>end the search</td></tr>
@@ -2042,7 +2042,14 @@ function fromMouse() {
   applyVisual();
   drawCursor();
 }
-document.addEventListener('mouseup', e => { if (e.button === 0 && !drag) setTimeout(fromMouse, 0); });
+document.addEventListener('mouseup', e => {
+  if (e.button === 0 && !drag) setTimeout(fromMouse, 0);
+  // the back and forward buttons of the mouse jump as Ctrl+o and Ctrl+i, instead of leaving the page
+  if (e.button === 3 || e.button === 4) {
+    e.preventDefault();
+    if (e.button === 3) jump(state.back, state.fwd); else jump(state.fwd, state.back);
+  }
+});
 
 function startVisual(mode) {
   if (!placeCursor()) { hint('no text on the screen'); return; }

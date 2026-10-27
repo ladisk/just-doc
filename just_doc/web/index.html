@@ -204,7 +204,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> comments &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>gn</kbd> answers &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
@@ -213,8 +213,9 @@
   <h2>Keys — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
   <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
   <table>
-    <tr><td><kbd>a</kbd></td><td>comment on the selected text (or edit the comment of the selected mark; once it is answered: reply)</td></tr>
+    <tr><td><kbd>a</kbd></td><td>comment on the selected text; on a comment: reply once it is answered, else edit it</td></tr>
     <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
+    <tr><td><kbd>E</kbd></td><td>edit your comment; the other side does not see the change, so after an answer reply instead</td></tr>
     <tr><td><kbd>gn</kbd> / <kbd>gN</kbd></td><td>go to the next / previous comment answered since the last hand-over, or change, from where you are; a card shows the reply, your comment and the change</td></tr>
     <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list, or on a change the group of changes; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
@@ -1227,7 +1228,7 @@ function showCard() {
   } else {
     const k = document.createElement('div');
     k.className = 'k';
-    k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;'
+    k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;'
                          : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
       + '<kbd>gn</kbd> next &nbsp;<kbd>gN</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
     card.append(k);
@@ -2669,6 +2670,10 @@ function handleKey(e) {
     case 'A':
       e.preventDefault();
       { const id = target(); if (id) openEditor(id, false, true); else hint('go to a comment first (n or gn)'); }
+      return;
+    case 'E':
+      e.preventDefault();
+      { const id = target(); if (id) openEditor(id); else hint('go to a comment first (n or gn)'); }
       return;
     case 'P': e.preventDefault(); setSingle(!state.single); return;
     case 'm': case 'M': e.preventDefault(); showChanges(k === 'm' ? BASE : 'commit'); return;

@@ -37,6 +37,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 |---|---|
 | `a` | highlight the selection and write a comment; on a selected comment, edit it, or once it is answered or done, reply; `Enter` in an empty field leaves a plain highlight |
 | `A` | reply to the selected comment, the one of the open card or the one under the cursor (see "Reviewing with a coding assistant") |
+| `E` | edit your comment; the assistant does not see an edit after it answered, so reply then |
 | `gn` / `gN` | go to the next / previous comment answered since the last hand-over, or change, starting from where you are; a card shows it (see "What changed") |
 | `za` | open or close the row of the comment in the list, or on a change the group of changes; `zR` / `zM` open / close all rows |
 | `D` | show or hide the comments that are done |

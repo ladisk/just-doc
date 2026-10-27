@@ -120,6 +120,12 @@ Everything goes through these commands; do not edit the .comments.json file.
    clear. Do not change the source for a comment that asks a question or that
    you disagree with: reply and wait for the answer.
 
+   When the author only agrees or confirms ("ok", "good", "done", "thanks"),
+   there is nothing more to say: mark the comment as done (--done 3), with a
+   short reply if one helps. Leave no open comment without either; the window
+   shows the author which comments you were shown and left unanswered, and
+   --wait marks such a comment with "(shown to you before and not answered)".
+
 4. When a comment asks for a change, change the source file (for LaTeX,
    compile it again). The window loads the new version by itself. Then say
    what you did and mark the comment as done:
@@ -195,6 +201,22 @@ def answer(doc, ref, text, name):
         save_comments(doc, annots)
 
 
+def spoke_at(a):
+    """Return when the author last said something on a comment: its creation or their last reply."""
+    return max([a.get("created")] + [r.get("at") for r in a.get("replies", []) if not r.get("from")], key=stamp_key)
+
+
+def mark_seen(doc):
+    """Note on each open comment that a --wait shows it to the assistant now."""
+    with WRITING:
+        annots = load_comments(doc)["annots"]
+        now = now_stamp()
+        for a in annots:
+            if is_open(a):
+                a.setdefault("seen", []).append(now)
+        save_comments(doc, annots)
+
+
 def keep_replies(doc, annots):
     """Put the replies and done marks that are in the file but not in ``annots`` back in.
 
@@ -207,6 +229,9 @@ def keep_replies(doc, annots):
         missing = [r for r in was.get("replies", []) if r not in a.get("replies", [])]
         if missing:
             a["replies"] = sorted(a.get("replies", []) + missing, key=lambda r: stamp_key(r.get("at")))
+        # a --wait that showed the comment to the assistant a moment ago
+        if len(was.get("seen", [])) > len(a.get("seen", [])):
+            a["seen"] = was["seen"]
         # the window sets done to false when the author answers a comment that was done
         if was.get("done") and "done" not in a:
             a["done"] = True
@@ -662,7 +687,12 @@ def make_handler(tabs):
             elif route == "/api/wait":
                 # answers within half a minute, so the command notices when just-doc is gone
                 seconds = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("s", ["25"])[0]
-                self._json(200, {"done": tabs.wait(key, min(25.0, float(seconds)))})
+                done = tabs.wait(key, min(25.0, float(seconds)))
+                if done:
+                    # the comments that the --wait prints now: the window shows them as seen
+                    mark_seen(doc)
+                    tabs.touch(key)
+                self._json(200, {"done": done})
             else:
                 super().do_GET()
 
@@ -1058,6 +1088,9 @@ def read(doc, as_json, only_open=False):
             print("    (the text is no longer found in the document; the page is the old one)")
         for r in a.get("replies", []):
             print(f"    reply ({r.get('from') or 'author'}): {r['text']}")
+        seen = a.get("seen", [])
+        if a["open"] and len(seen) > 1 and stamp_key(spoke_at(a)) <= stamp_key(seen[-2]):
+            print("    (shown to you before and not answered)")
         print()
     if only_open:
         print(f"{len(shown)} open comment(s), {len(annots) - len(shown)} done or answered ({doc.name} --read shows all)")

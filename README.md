@@ -181,7 +181,8 @@ an empty `text` with a `change` means that the text was removed.
 
 A comment can have `replies`, a list of entries with `text`, the time `at` and
 `from`, the name given with `--reply`. A reply without `from` was written in
-the window. `done` marks a comment as done, and `done_at` holds when.
+the window. `done` marks a comment as done, and `done_at` holds when. `seen`
+lists the times a `just-doc --wait` showed the comment to the assistant.
 
 ## Reviewing with a coding assistant
 
@@ -215,13 +216,28 @@ The round goes like this:
 5. When you agree, the assistant changes the source. The window loads the new
    version by itself and the comment is marked as done.
 
-Each row of the list is two lines: a mark that says where the comment stands
-(new reply, answered, waiting, done, not handed over), the page and the text;
+Each row of the list is two lines: a mark that says where the comment stands,
+the page and the text;
 then who spoke last and what. The selected comment has a red frame and its row
 is open, with the whole conversation; `za` opens or closes a row, `zR` / `zM`
 all of them. Below the comments, one closed line counts the changes that have
 no comment; the row that `n` is on shows under it, and `za` on a
 change (or a click on the line) shows them all.
+
+The marks (the `?` key list explains them too):
+
+| mark | meaning |
+|---|---|
+| not handed over | written or answered after your last `Ctrl+Enter` |
+| not seen yet | handed over, but no `--wait` has shown it to the assistant yet |
+| seen 10:42, no reply | the assistant was shown it then and neither answered nor marked it done |
+| new reply / new: done | the assistant answered or marked it done, and you have not looked yet |
+| answered | the assistant spoke last and you have looked at it |
+| done ✓ | done; it leaves the list at your next `Ctrl+Enter` |
+| change | a change since the last hand-over that no comment asked for |
+
+When the assistant is shown a comment again that it left unanswered before,
+`--wait` marks it with "(shown to you before and not answered)".
 
 ### The commands
 

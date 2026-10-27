@@ -74,12 +74,14 @@
   .it.on { background: #ffe9e0; box-shadow: inset 4px 0 0 #d00000; outline: 2px solid #d00000; outline-offset: -2px; }
   .it .l1 { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; color: #777; font-size: 11px; }
   .it .l1 .qq { overflow: hidden; text-overflow: ellipsis; min-width: 0; color: #555; font-style: italic; font-size: 12px; }
-  .it .st { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 700; background: #e4e4e0; color: #666; }
-  .it .st.new { background: #2f7bff; color: #fff; }
-  .it .st.read { background: #dbe7ff; color: #0050d0; }
-  .it .st.wait { background: #ffe0b0; color: #7a4300; }
-  .it .st.done { background: #c9f2c9; color: #14601f; }
-  .it .st.chg { background: #fff; color: #2f7bff; box-shadow: inset 0 0 0 1px #2f7bff; }
+  .st { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 700; background: #e4e4e0; color: #666; white-space: nowrap; }
+  .st.new { background: #2f7bff; color: #fff; }
+  .st.read { background: #dbe7ff; color: #0050d0; }
+  .st.wait { background: #ffe0b0; color: #7a4300; }
+  .st.skip { background: #f6cccc; color: #8a1c1c; }
+  .st.done { background: #c9f2c9; color: #14601f; }
+  .st.chg { background: #fff; color: #2f7bff; box-shadow: inset 0 0 0 1px #2f7bff; }
+  #help h3 { margin: 14px 0 6px; font-size: 13px; }
   .it.chg.seen:not(.on) { opacity: .55; }
   .grp.chgs { cursor: pointer; }
   .grp.chgs:hover { background: #e0e0db; }
@@ -275,6 +277,16 @@
     <tr><td><kbd>Ctrl</kbd> <kbd>w</kbd></td><td>close the tab; also <kbd>Alt</kbd> <kbd>w</kbd></td></tr>
     <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
     <tr><td><kbd>Esc</kbd></td><td>cancel / deselect</td></tr>
+  </table>
+  <h3>The marks in the comment list</h3>
+  <table>
+    <tr><td><span class="st draft">not handed over</span></td><td>written or answered after your last <kbd>Ctrl</kbd> <kbd>Enter</kbd>: the assistant gets it with the next one</td></tr>
+    <tr><td><span class="st wait">not seen yet</span></td><td>handed over, but no <code>just-doc --wait</code> has shown it to the assistant yet</td></tr>
+    <tr><td><span class="st skip">seen 10:42, no reply</span></td><td>the assistant was shown it at that time and neither answered nor marked it done</td></tr>
+    <tr><td><span class="st new">new reply</span></td><td>the assistant answered and you have not looked at it yet; <span class="st new">new: done</span> it marked it done</td></tr>
+    <tr><td><span class="st read">answered</span></td><td>the assistant spoke last and you have looked at it; answer with <kbd>A</kbd> if you do not agree</td></tr>
+    <tr><td><span class="st done">done ✓</span></td><td>the assistant marked it done; it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
+    <tr><td><span class="st chg">change</span></td><td>a change in the document since the last hand-over that no comment asked for</td></tr>
   </table>
 </div></div>
 <div id="editor"><textarea id="etext" placeholder="comment …"></textarea>
@@ -591,11 +603,19 @@ const listedNow = a => !(a.done && filed.includes(a.id)) || isNew(a);
 const listed = a => listedNow(a) || state.archive || a.id === state.sel;
 
 // where a comment stands, for the mark on its row: [class, word]
+// when the author last said something on a comment: its creation or their last reply, in ms
+const spokeAt = a => Math.max(Date.parse(a.created) || 0, ...(a.replies || []).filter(r => !r.from).map(r => Date.parse(r.at) || 0));
+// when a --wait last showed the comment to the assistant, in ms; 0 if never
+const seenAt = a => Date.parse((a.seen || []).at(-1)) || 0;
+
 function standing(a) {
   if (isNew(a)) return ['new', lastFrom(a) ? 'new reply' : 'new: done'];
   if (a.done) return ['done', 'done ✓'];
   if (lastFrom(a)) return ['read', 'answered'];
-  return !rounds.length || Date.parse(a.created) > roundStart() ? ['draft', 'not handed over'] : ['wait', 'waiting'];
+  // the author spoke last: since the hand-over, not shown to the assistant yet, or shown and left
+  if (!rounds.length || spokeAt(a) > roundStart()) return ['draft', 'not handed over'];
+  if (seenAt(a) >= spokeAt(a)) return ['skip', 'seen ' + new Date(seenAt(a)).toTimeString().slice(0, 5) + ', no reply'];
+  return ['wait', 'not seen yet'];
 }
 
 // whether the row of a comment is open; the selected one is, unless it was closed with za
@@ -1239,7 +1259,7 @@ function showCard() {
   }
   const r = it.a && theirs(it.a);
   h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'
-                     : it.a ? (r ? r.from + ' replied' : it.a.done ? 'done, no reply' : 'your comment') + (r && it.a.done ? ' · done ✓' : '')
+                     : it.a ? (r ? r.from + ' replied' : it.a.done ? 'done, no reply' : 'your comment · ' + standing(it.a)[1]) + (r && it.a.done ? ' · done ✓' : '')
                      : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't'));
   if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);

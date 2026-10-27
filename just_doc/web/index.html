@@ -569,7 +569,7 @@ function drawHighlights() {
   for (const m of c ? c.marks : []) {
     for (const r of m.rects) {
       const d = document.createElement('div');
-      d.className = 'chg' + (m.cut ? ' cut' : '') + (owner(m) ? '' : ' own') + (c.seen.includes(m.sig) ? ' seen' : '')
+      d.className = 'chg' + (m.cut ? ' cut' : '') + (owner(m) ? '' : ' own') + (c.seen.includes(seenKey(m)) ? ' seen' : '')
                     + (state.item?.marks.includes(m) ? ' on' : '');
       d.style.cssText = `left:${r.x * state.scale}px;top:${r.y * state.scale}px;width:${r.w * state.scale}px;height:${r.h * state.scale}px`;
       pgs[r.p]?.querySelector('.hl').appendChild(d);
@@ -1000,6 +1000,10 @@ function compareWords(a, b) {
   return marks;
 }
 
+// what a change is remembered by once it was seen: its text and its place, so that the same
+// change in two places is seen in each on its own
+function seenKey(m) { return m.sig + '@' + m.rects[0].p + ':' + Math.round(m.rects[0].y); }
+
 // m and M: mark what is not as it was at the last Ctrl+Enter / at the last commit;
 // again hides the marks, unless fresh asks for them to be made again
 async function showChanges(kind, fresh = false) {
@@ -1046,7 +1050,7 @@ async function showChanges(kind, fresh = false) {
       }
       // a change that n went to is "seen"; what the list holds of older rounds is dropped
       const kept = marks.filter(m => m.rects.length), all = store.get('chgseen', {});
-      const seen = (all[kind] || []).filter(g => kept.some(m => m.sig === g));
+      const seen = (all[kind] || []).filter(g => kept.some(m => seenKey(m) === g));
       store.set('chgseen', { ...all, [kind]: seen });
       state.changes = { kind, marks: kept, seen, old, oldPage };
     } catch (err) {
@@ -1135,7 +1139,7 @@ function reviewItems() {
     if (answered(a)) items.push({ key: 'c' + a.id, a, marks: mine.get(a) || [], at: a.rects[0] });
   return items.sort((x, y) => x.at.p - y.at.p || x.at.y - y.at.y || x.at.x - y.at.x);
 }
-const itemSeen = it => !(it.a && isNew(it.a)) && it.marks.every(m => state.changes.seen.includes(m.sig));
+const itemSeen = it => !(it.a && isNew(it.a)) && it.marks.every(m => state.changes.seen.includes(seenKey(m)));
 
 // the order of two places {p, x, y}; on the same line and a point apart they are the same
 const placeOrder = (q, r) => q.p - r.p || (Math.abs(q.y - r.y) > 3 ? q.y - r.y : Math.abs(q.x - r.x) > 1 ? q.x - r.x : 0);
@@ -1177,7 +1181,7 @@ function stepAnnot(dir) {
 function goItem(it) {
   const c = state.changes;
   if (c) {
-    for (const m of it.marks) if (!c.seen.includes(m.sig)) c.seen.push(m.sig);
+    for (const m of it.marks) if (!c.seen.includes(seenKey(m))) c.seen.push(seenKey(m));
     store.set('chgseen', { ...store.get('chgseen', {}), [c.kind]: c.seen });
   }
   pushJump();

@@ -51,6 +51,9 @@
   .pg .hl div { position: absolute; background: #ffe45c; border-radius: 2px; }
   .pg .hl div.c { background: #ffb347; }
   .pg .hl div.box { background: rgba(255, 179, 71, .16); border: 2px solid #f08000; box-sizing: border-box; }
+  /* a point: a drop-shaped pin whose tip is at the point (the stored rectangle has no size) */
+  .pg .hl div.pin { width: 14px !important; height: 14px !important; margin: -19px 0 0 -7px; background: #f08000;
+                    border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
   .pg .hl div.strike { background: linear-gradient(transparent 44%, #d00000 44%, #d00000 56%, transparent 56%); border-radius: 0; }
   /* the selected comment: a thick frame that blinks when it is new, and the other marks step back */
   .pg .hl div.on { outline: 3px solid #d00000; outline-offset: 1px; }
@@ -242,7 +245,7 @@
     <tr><td><kbd>gb</kbd></td><td>show the page as it was before the changes; <kbd>gb</kbd> or <kbd>Esc</kbd> goes back</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>hand the comments over to the <code>just-doc --wait</code> that is waiting for them</td></tr>
     <tr><td><kbd>s</kbd></td><td>strike through the selected text: it should be deleted</td></tr>
-    <tr><td><kbd>r</kbd></td><td>draw a rectangle and comment (for a figure, equation or code)</td></tr>
+    <tr><td><kbd>r</kbd></td><td>draw a rectangle and comment (for a figure, equation or code); click instead of drag: a point, for a place with no text</td></tr>
     <tr><td><kbd>d</kbd></td><td>delete the selected highlight or rectangle</td></tr>
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
@@ -667,10 +670,12 @@ function drawList() {
     const l1 = document.createElement('div'); l1.className = 'l1';
     l1.append(span('span', word, 'st ' + key), 'p. ' + a.rects[0].p + (a.lost ? ' · text not found' : ''));
     if (quote) l1.append(span('span', (a.kind === 'strike' ? '✕ ' : '') + '«' + quote + '»', 'qq'));
+    else if (a.kind === 'pin') l1.append(span('span', '📍 point', 'qq'));
     const r = (a.replies || []).at(-1), l2 = document.createElement('div');
     l2.className = 'l2' + (r?.from ? '' : ' me');
     l2.append(span('b', (r?.from || 'you') + ': '), r ? r.text : a.comment || (a.kind === 'strike' ? '(delete)' : '(no comment)'));
-    const q = document.createElement('div'); q.className = 'q' + (a.kind === 'strike' ? ' strike' : ''); q.textContent = (a.kind === 'box' ? '▭ ' : '') + (a.text ? '«' + a.text.replace(/\s+/g, ' ') + '»' : '(area without text)');
+    const q = document.createElement('div'); q.className = 'q' + (a.kind === 'strike' ? ' strike' : ''); q.textContent = a.kind === 'pin' ? '📍 point' + (a.near ? ' under «' + a.near + '»' : '')
+      : (a.kind === 'box' ? '▭ ' : '') + (a.text ? '«' + a.text.replace(/\s+/g, ' ') + '»' : '(area without text)');
     if (a.was !== undefined || a.change !== undefined) {
       // the text as it was, and what stands there now; a comment on a change shows the change
       const was = document.createElement('s'), now = document.createElement('u'), before = a.change ?? a.was;
@@ -872,7 +877,7 @@ async function keepOnPages() {
 // Finds the text of a comment in the document as it is now and moves the comment there.
 // Returns true when the comment was changed.
 async function place(a) {
-  if (a.kind === 'box' || !a.rects.length) return false;
+  if (a.kind === 'box' || a.kind === 'pin' || !a.rects.length) return false;
   const key = keyOf(a.text), old = a.rects[0];
   if (key.length < 3 && a.before === undefined) return false;
   // first the pages around the old place, then the whole document
@@ -1543,7 +1548,27 @@ function captureRange(range, raw, text) {
 function setRectMode(on) {
   state.rectMode = on;
   document.body.classList.toggle('rectmode', on);
-  if (on) { window.getSelection().removeAllRanges(); hint('drag a rectangle (Esc cancels)'); }
+  if (on) { window.getSelection().removeAllRanges(); hint('drag a rectangle, or click for a point (Esc cancels)'); }
+}
+
+// the text line just above a point, in its column, so the assistant knows where the point is
+// without seeing the page (r in PDF points)
+function lineAbove(pg, r) {
+  const box = pg.getBoundingClientRect(), s = state.scale;
+  const spans = [...pg.querySelectorAll('.textLayer span')].filter(sp => !sp.children.length && sp.textContent.trim())
+    .map(sp => { const b = sp.getBoundingClientRect();
+                 return { t: sp.textContent, x: (b.left - box.left) / s, r: (b.right - box.left) / s, y: (b.top - box.top) / s, b: (b.bottom - box.top) / s }; })
+    .filter(w => w.b <= r.y + 2);
+  // the nearest line above that reaches over the point's column, else the nearest of all
+  const near = (ws => ws.sort((a, b) => b.b - a.b)[0]);
+  const hit = near(spans.filter(w => w.x <= r.x + 150 && w.r >= r.x - 150)) || near(spans.slice());
+  if (!hit) return '';
+  // the rest of its line, left and right, as long as no wide gap (the gap between columns) comes
+  const line = spans.filter(w => Math.abs(w.y - hit.y) < 3).sort((a, b) => a.x - b.x);
+  let i = line.indexOf(hit), j = i;
+  while (i > 0 && line[i].x - line[i - 1].r < 20) i--;
+  while (j < line.length - 1 && line[j + 1].x - line[j].r < 20) j++;
+  return line.slice(i, j + 1).map(w => w.t).join(' ').replace(/\s+/g, ' ').trim();
 }
 
 // text of the page that lies inside the rectangle, so the comment can still be located in the source
@@ -1581,17 +1606,20 @@ document.addEventListener('mousemove', e => {
 });
 document.addEventListener('mouseup', () => {
   if (!drag) return;
-  const { pg, el, r } = drag;
+  const { pg, el, r } = drag, drag0 = { x: drag.x0, y: drag.y0 };
   drag = null;
   el.remove();
   setRectMode(false);
   state.skipClick = true;
   setTimeout(() => state.skipClick = false, 0);
-  if (!r || r.w < 4 || r.h < 4) return;
-  const rect = { p: +pg.dataset.page };
-  for (const k of ['x', 'y', 'w', 'h']) rect[k] = Math.round(r[k] / state.scale * 100) / 100;
-  const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: 'box', text: textInside(pg, rect),
-              rects: [rect], comment: '', created: new Date().toISOString() };
+  // a click with no drag: a point, for a comment where there is no text, such as "something is missing here"
+  const pin = !r || (r.w < 4 && r.h < 4);
+  const box = pg.getBoundingClientRect(), rect = { p: +pg.dataset.page };
+  const at = pin ? { x: drag0.x - box.left, y: drag0.y - box.top, w: 0, h: 0 } : r;
+  for (const k of ['x', 'y', 'w', 'h']) rect[k] = Math.round(at[k] / state.scale * 100) / 100;
+  const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: pin ? 'pin' : 'box',
+              text: pin ? '' : textInside(pg, rect), rects: [rect], comment: '', created: new Date().toISOString() };
+  if (pin) a.near = lineAbove(pg, rect);
   state.annots.push(a);
   state.sel = a.id;
   redraw();
@@ -2032,7 +2060,7 @@ function turnPage(dir) {
 // when the text of that page is not loaded yet, it is done as soon as it is
 function cursorToAnnot(a) {
   state.cursorTo = null;
-  if (a.kind === 'box' || state.mode !== 'normal') return;
+  if (a.kind === 'box' || a.kind === 'pin' || state.mode !== 'normal') return;
   const r = a.rects[0], ws = wordsForPage(r.p);
   if (!ws.length) { state.cursorTo = () => cursorToAnnot(a); return; }
   const i = wordAtPoint(r.p, r.x + 0.5, r.y + r.h / 2);
@@ -3163,8 +3191,9 @@ document.addEventListener('click', e => {
   if (at) { state.cursor = at; state.wantX = null; drawCursor(); }
   const link = linkAt(p, x, y);
   if (link) { followLink(link); return; }
-  const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === p && x >= r.x - 1 && x <= r.x + r.w + 1
-                                                             && y >= r.y - 1 && y <= r.y + r.h + 1));
+  const near = (a, r) => a.kind === 'pin' ? Math.abs(x - r.x) <= 9 / state.scale && y >= r.y - 22 / state.scale && y <= r.y + 2
+                                           : x >= r.x - 1 && x <= r.x + r.w + 1 && y >= r.y - 1 && y <= r.y + r.h + 1;
+  const hit = !document.body.classList.contains('no-hl') && state.annots.find(a => listedNow(a) && a.rects.some(r => r.p === p && near(a, r)));
   if (hit) goItem(itemOf(hit), true); else select(null);
 });
 document.addEventListener('dblclick', e => {

@@ -46,7 +46,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `gh` | history: the rounds so far, each with what you handed over, the answers and the changes; `Enter` shows the document as it was at the end of a round (see "Rounds and history") |
 | `Ctrl` `Enter` | hand the comments over to the `just-doc --wait` that is waiting for them |
 | `s` | strike through the selection: this text should be deleted |
-| `r` | draw a rectangle (for a figure, an equation or code) and comment on it |
+| `r` | draw a rectangle (for a figure, an equation or code) and comment on it; a click with no drag puts a point instead, for a place with no text |
 | `d` | delete the selected highlight or rectangle (click it first) |
 | `u` | undo the last delete |
 | `c` | hide or show the comment list, so the page gets the full width |
@@ -171,7 +171,9 @@ is active, `n` and `N` step through the matches and not through the comments.
 change. Each entry holds the selected `text`, the `comment`, and `rects`: page
 number `p` and position in PDF points measured from the top-left corner.
 An entry with `kind` `strike` is struck-through text that should be deleted,
-and `kind` `box` is a rectangle; an entry without `kind` is a highlight.
+`kind` `box` is a rectangle, and `kind` `pin` is a point: its one rectangle has
+no size, `text` is empty, and `near` holds the text line just above it. An
+entry without `kind` is a highlight.
 
 `before` and `after` hold the letters and digits around the text, to find it
 again in a changed document (see "When the document changes"); `was` is the
@@ -304,8 +306,8 @@ version:
 
 Each comment remembers 120 letters and digits before and after its text for
 this. A changed text next to another changed text is found as one piece, so
-two comments can then point to the same new sentence. A rectangle (`r`) stays
-where it was drawn. The search runs in the window, so a document that changed
+two comments can then point to the same new sentence. A rectangle or a point
+(`r`) stays where it was drawn. The search runs in the window, so a document that changed
 while it was not open is handled when it is opened next.
 
 ### What changed
@@ -380,7 +382,7 @@ toolbar turns purple and says which round it is. This view is read only;
 
 The comments are not stored in the PDF, so other viewers do not show them.
 `Ctrl+S` (or `--export`) writes `book.commented.pdf`: a copy of the PDF with
-every highlight, strike-through and comment as an ordinary PDF annotation, readable in Okular,
+every highlight, strike-through, rectangle, point (a sticky note) and comment as an ordinary PDF annotation, readable in Okular,
 Evince, Acrobat and others. The original PDF is never changed. The JSON file
 stays the working copy; export again after adding comments.
 

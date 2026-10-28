@@ -105,6 +105,8 @@ Everything goes through these commands; do not edit the .comments.json file.
    place in the source when it is known (for markdown and HTML, and for
    LaTeX with SyncTeX). "delete:" instead of "text:" means that the author wants this
    text removed. "area:" is a rectangle around a figure, an equation or code.
+   "point:" is a spot on the page with no text, such as a place where
+   something is missing; it gives the text line just above the spot.
    A comment without words is a plain highlight: ask what is meant.
    "text" is the text as it stands in the document now; when it was changed
    after the comment was written, a line below gives the text as it was.
@@ -445,7 +447,7 @@ def export(doc):
     """
     try:
         from pypdf import PdfReader, PdfWriter
-        from pypdf.annotations import Highlight, Rectangle
+        from pypdf.annotations import Highlight, Rectangle, Text
         from pypdf.generic import ArrayObject, FloatObject, NameObject, TextStringObject
     except ImportError as exc:
         raise RuntimeError("export needs the pypdf package (it comes with 'uv tool install')") from exc
@@ -469,7 +471,12 @@ def export(doc):
                 xs += [x1, x2]
                 ys += [y1, y2]
             bounds = (min(xs), min(ys), max(xs), max(ys))
-            if a.get("kind") == "box":
+            if a.get("kind") == "pin":
+                # a point: a sticky note whose icon stands just above and right of it
+                x, y = bounds[0], bounds[1]
+                annot = Text(rect=(x, y, x + 18, y + 18), text="")
+                annot[NameObject("/C")] = ArrayObject(FloatObject(v) for v in (0.94, 0.5, 0.0))
+            elif a.get("kind") == "box":
                 annot = Rectangle(rect=bounds)
                 annot[NameObject("/C")] = ArrayObject(FloatObject(v) for v in (0.94, 0.5, 0.0))
             else:
@@ -1046,7 +1053,8 @@ def source_lines(doc, annots):
                     lines.append(number)
     body = "".join(chars)
     for a in annots:
-        key = "".join(ch.lower() for ch in a["text"] if ch.isalnum())[:80]
+        # a point has no text of its own: the line above it stands in
+        key = "".join(ch.lower() for ch in a["text"] or a.get("near", "") if ch.isalnum())[:80]
         at = body.find(key) if len(key) > 2 else -1
         if at < 0:
             a["source"] = None
@@ -1067,7 +1075,7 @@ def read(doc, as_json, only_open=False):
         source_lines(doc, annots)
     else:
         for a in annots:
-            a["source"] = source_line(doc, a["rects"][0], centre=a.get("kind") == "box")
+            a["source"] = source_line(doc, a["rects"][0], centre=a.get("kind") in ("box", "pin"))
     for i, a in enumerate(annots, 1):
         a["number"], a["open"] = i, is_open(a)
     shown = [a for a in annots if a["open"] or not only_open]
@@ -1077,8 +1085,11 @@ def read(doc, as_json, only_open=False):
     for a in shown:
         i = a["number"]
         where = f"p. {a['rects'][0]['p']}" + (f"  {a['source']}" if a["source"] else "")
-        kind = {"box": "area", "strike": "delete"}.get(a.get("kind"), "text")
+        kind = {"box": "area", "strike": "delete", "pin": "point"}.get(a.get("kind"), "text")
         text = a["text"] or "(no text inside)"
+        if a.get("kind") == "pin":
+            r = a["rects"][0]
+            text = f"at x {r['x']:.0f}, y {r['y']:.0f} pt, under the line «{a.get('near') or '?'}»"
         if a.get("change") is not None and not a["text"]:
             kind, text = "removed", a["change"]
         where += "  (done)" if a.get("done") else "" if a["open"] or only_open else "  (answered)"

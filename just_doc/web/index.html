@@ -111,7 +111,7 @@
   .pg .hl div.chg.seen { opacity: .35; }
   .pg .hl div.chg.on { opacity: 1; }
   .pg canvas.old { position: absolute; left: 0; top: 0; z-index: 3; box-shadow: 0 0 0 3px #f08000; }
-  .pg .card { position: absolute; z-index: 6; max-width: 460px; padding: 6px 9px; background: #fff; color: #222;
+  .pg .card { scroll-margin: calc(var(--bar) + 10px) 0 44px; max-height: calc(100vh - var(--bar) - 70px); overflow-y: auto; position: absolute; z-index: 6; max-width: 460px; padding: 6px 9px; background: #fff; color: #222;
                border: 2px solid #2f7bff; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
                font: 14px/1.45 system-ui, sans-serif; }
   .pg .card.own { border-style: dashed; }
@@ -1229,6 +1229,7 @@ function goItem(it, stay = false) {
   drawList();
   showNews();
   $('list').querySelector('.it.on')?.scrollIntoView({ block: 'nearest' });
+  if (!stay) document.querySelector('.pg .card')?.scrollIntoView({ block: 'nearest' });
 }
 
 // where the text line of the rectangle r ends: the words after it that follow with no wide
@@ -1337,7 +1338,9 @@ function showCard() {
     link(`left:${x}px;top:${y}px;width:${pg.offsetWidth + gap - x}px;height:2px`);
   } else {
     const low = lines.reduce((x, r) => (r.y + r.h > x.y + x.h ? r : x), lines[0]);
-    card.style.top = (low.y + low.h) * state.scale + 6 + 'px';
+    const below = (low.y + low.h) * state.scale + 6, above = Math.min(...lines.map(r => r.y)) * state.scale - card.offsetHeight - 6;
+    // at the foot of the page the card would hang out of it: above the first line then, where there is room
+    card.style.top = (below + card.offsetHeight > pg.offsetHeight && above >= 0 ? above : below) + 'px';
     card.style.left = Math.max(4, Math.min(it.at.x * state.scale, pg.offsetWidth - card.offsetWidth - 4)) + 'px';
   }
   if (had && ed) $('etext').focus();

@@ -22,6 +22,8 @@ Usage
     just-doc book.pdf --done 2   mark comment 2 as done
     just-doc --guide             print how a coding assistant uses the three
                                  commands above to review a document with you
+    just-doc --install-desktop   add just-doc to "Open with" in file managers
+                                 (Linux)
 """
 import argparse
 import getpass
@@ -981,6 +983,31 @@ def show(port, window):
         sys.exit("no just-doc is running; start one with: just-doc FILE")
 
 
+def install_desktop():
+    """Write a .desktop file, so file managers offer just-doc under "Open with"."""
+    if not sys.platform.startswith("linux"):
+        sys.exit("--install-desktop works on Linux only")
+    # quoted and escaped as the Exec key of the desktop entry specification asks
+    exe = re.sub(r'(["`$\\])', r"\\\1", os.path.abspath(sys.argv[0])).replace("\\", "\\\\").replace("%", "%%")
+    folder = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "applications"
+    folder.mkdir(parents=True, exist_ok=True)
+    out = folder / "just-doc.desktop"
+    out.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=just-doc\n"
+        "Comment=Highlight and comment a PDF, a markdown or an HTML file\n"
+        f'Exec="{exe}" %f\n'
+        "Terminal=false\n"
+        "Categories=Office;Viewer;\n"
+        "MimeType=application/pdf;text/markdown;text/x-markdown;text/html;\n",
+        encoding="utf-8",
+    )
+    if shutil.which("update-desktop-database"):
+        subprocess.run(["update-desktop-database", str(folder)], check=False)
+    print(out)
+
+
 def source_line(doc, rect, centre=False):
     """Map a highlight to ``file:line`` in the TeX source via SyncTeX, if available.
 
@@ -1125,6 +1152,8 @@ def main():
                     help="with --wait: give up after this time (exit status 2); the default is to wait without end")
     ap.add_argument("--guide", action="store_true",
                     help="print how a coding assistant reviews a document with you through just-doc")
+    ap.add_argument("--install-desktop", action="store_true",
+                    help='add just-doc to "Open with" in file managers (Linux); default programs stay as they are')
     ap.add_argument("--reply", nargs=2, action="append", metavar=("N", "TEXT"),
                     help="add a reply to comment N (its number in --read, or its id); can be given several times")
     ap.add_argument("--done", action="append", metavar="N", default=[],
@@ -1136,6 +1165,9 @@ def main():
     args = ap.parse_args()
     if args.guide:
         print(GUIDE, end="")
+        return
+    if args.install_desktop:
+        install_desktop()
         return
     if args.pdf is None:
         if args.reply or args.done or args.wait or args.read or args.export:

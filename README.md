@@ -14,6 +14,7 @@ just-doc                   # list the open documents; open the window again if i
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
 just-doc --guide           # how a coding assistant reviews a document with you
+just-doc --install-desktop # add just-doc to "Open with" in file managers (Linux)
 ```
 
 ## Install
@@ -30,6 +31,11 @@ To try it without installing: `uvx --from git+https://github.com/ladisk/just-doc
 
 Needs Python 3.9 or newer; the only dependency is `pypdf`, used for the export. The window is a Chromium, Brave or
 Chrome app window if one is installed, otherwise a tab in the default browser.
+
+On Linux, `just-doc --install-desktop` writes `just-doc.desktop` to the user's applications folder, so file managers
+offer just-doc under "Open with" for PDF, markdown and HTML files. The default programs for these files stay as they
+are. Run it again if the `just-doc` command moves. The entry opens a file: started from an application launcher without
+one, just-doc has nothing to open and exits unless a just-doc is already running.
 
 ## Keys
 

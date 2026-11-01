@@ -14,8 +14,8 @@ Start just-doc without a file and open documents from inside the window.
   showing only PDF and markdown files; `Tab` completes and `Enter` opens the
   file as a new tab.
 - Recent files are kept in one small file in the user folder, newest first.
-- `just-doc --install-desktop` writes a `.desktop` file, so just-doc is in
-  the application launcher and a window manager key can start it.
+- The entry that `just-doc --install-desktop` writes also starts just-doc from
+  the application launcher or a window manager key, on the start page.
 - A key to quit just-doc from the window, because an app started from the
   launcher has no terminal to stop it in.
 

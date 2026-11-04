@@ -223,7 +223,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>K</kbd> preview &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>K</kbd> preview &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="peek"><div class="h"></div><canvas></canvas></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
@@ -236,6 +236,7 @@
     <tr><td><kbd>a</kbd></td><td>comment on the selected text; on a comment: reply once it is answered, else edit it</td></tr>
     <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
     <tr><td><kbd>E</kbd></td><td>edit your comment; the other side does not see the change, so after an answer reply instead</td></tr>
+    <tr><td><kbd>x</kbd></td><td>mark the comment done yourself, when the answer needs no reply; <kbd>x</kbd> again opens it</td></tr>
     <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list, or on a change the group of changes; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
@@ -290,8 +291,8 @@
     <tr><td><span class="st wait">not seen yet</span></td><td>handed over, but no <code>just-doc --wait</code> has shown it to the assistant yet</td></tr>
     <tr><td><span class="st skip">seen 10:42, no reply</span></td><td>the assistant was shown it at that time and neither answered nor marked it done</td></tr>
     <tr><td><span class="st new">new reply</span></td><td>the assistant answered and you have not looked at it yet; <span class="st new">new: done</span> it marked it done</td></tr>
-    <tr><td><span class="st read">answered</span></td><td>the assistant spoke last and you have looked at it; answer with <kbd>A</kbd> if you do not agree</td></tr>
-    <tr><td><span class="st done">done ✓</span></td><td>the assistant marked it done; it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
+    <tr><td><span class="st read">answered</span></td><td>the assistant spoke last and you have looked at it; answer with <kbd>A</kbd> if you do not agree, or mark it done with <kbd>x</kbd></td></tr>
+    <tr><td><span class="st done">done ✓</span></td><td>the assistant or you (<kbd>x</kbd>) marked it done; it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
     <tr><td><span class="st chg">change</span></td><td>a change in the document since the last hand-over that no comment asked for</td></tr>
   </table>
 </div></div>
@@ -1310,7 +1311,7 @@ function showCard() {
   } else {
     const k = document.createElement('div');
     k.className = 'k';
-    k.innerHTML = (AT ? '' : it.a ? '<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;'
+    k.innerHTML = (AT ? '' : it.a ? `<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>x</kbd> ${it.a.done ? 'open again' : 'done'} &nbsp;`
                          : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
       + '<kbd>n</kbd> next &nbsp;<kbd>p</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
     card.append(k);
@@ -1664,6 +1665,23 @@ function target() {
 function editOrReply(id) {
   const a = state.annots.find(x => x.id === id);
   if (a) openEditor(id, false, !!(lastFrom(a) || a.done));
+}
+
+// x: you mark a comment done yourself, when the answer needs no reply; x again opens it.
+// It is not news: you did it.
+function toggleDone(id) {
+  if (AT) { readOnly(); return; }
+  const a = state.annots.find(x => x.id === id);
+  if (!a) return;
+  if (a.done) { a.done = false; delete a.done_at; }
+  else { a.done = true; a.done_at = new Date().toISOString(); }
+  looked[a.id] = outside(a);
+  store.set('seen', looked);
+  redraw();
+  showCard();
+  showNews();
+  save();
+  hint(a.done ? 'done ✓ · it leaves the list at the next Ctrl+Enter' : 'open again');
 }
 
 // fresh: the highlight was made together with this comment, so Esc removes it again;
@@ -3035,7 +3053,7 @@ function handleKey(e) {
     }
     return;
   }
-  if (AT && (['a', 's', 'r', 'd', 'u'].includes(lower) || k === 'Delete')) { e.preventDefault(); readOnly(); return; }
+  if (AT && (['a', 's', 'r', 'd', 'u', 'x'].includes(lower) || k === 'Delete')) { e.preventDefault(); readOnly(); return; }
   switch (k) {
     case 'V': e.preventDefault(); startVisual('vline'); return;
     case 'C': e.preventDefault(); toggleHl(); return;
@@ -3098,6 +3116,10 @@ function handleKey(e) {
         if (a) { state.annots.push(a); state.sel = a.id; redraw(); save(); } }
       return;
     case 'c': e.preventDefault(); toggleSide(); return;
+    case 'x':
+      e.preventDefault();
+      { const id = target(); if (id) toggleDone(id); else hint('go to a comment first (n)'); }
+      return;
     case 'n': e.preventDefault(); if (state.find) stepFind(1); else stepAnnot(1); return;
     case 't': e.preventDefault(); toggleToc(); return;
     case 'p': e.preventDefault(); stepAnnot(-1); return;

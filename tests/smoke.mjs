@@ -126,6 +126,12 @@ try {
   await type('author reply');
   const ar = await until(async () => (await annots()).some(a => (a.replies || []).some(r => r.text === 'author reply' && !r.from)), 4000);
   check('author reply saved (no "from")', !!ar, JSON.stringify((await annots())[0]?.replies));
+  // x marks done, x again opens it
+  await key('x');
+  check('x marks the comment done', !!(await until(async () => (await annots()).find(a => a.comment === 'smoke comment')?.done, 4000)));
+  check('the card then offers "x open again"', !!(await until(() => ev(`return /x open again/.test(d.querySelector('.pg .card')?.innerText || '')`), 3000)));
+  await key('x');
+  check('x again opens it', !!(await until(async () => (await annots()).find(a => a.comment === 'smoke comment')?.done === false, 4000)));
 
   // second comment on a later line, with its own reply
   await key('Escape'); await sleep(300);

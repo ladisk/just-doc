@@ -38,6 +38,7 @@ Chrome app window if one is installed, otherwise a tab in the default browser.
 | `a` | highlight the selection and write a comment; on a selected comment, edit it, or once it is answered or done, reply; `Enter` in an empty field leaves a plain highlight |
 | `A` | reply to the selected comment, the one of the open card or the one under the cursor (see "Reviewing with a coding assistant") |
 | `E` | edit your comment; the assistant does not see an edit after it answered, so reply then |
+| `x` | mark the comment done yourself, when the assistant's answer needs no reply; `x` again opens it |
 | `za` | open or close the row of the comment in the list, or on a change the group of changes; `zR` / `zM` open / close all rows |
 | `D` | show or hide the comments that are done |
 | `m` / `M` | mark what changed since the last hand-over / since the last commit; the same key again hides the marks (see "What changed") |
@@ -219,7 +220,8 @@ The round goes like this:
    the list (see "What changed").
 4. To answer a reply, press `A` on its card (or on the selected comment),
    write in the field that opens at the bottom of the card, and press
-   `Ctrl+Enter` again.
+   `Ctrl+Enter` again. When the answer needs no reply, press `x` to mark the
+   comment done.
 5. When you agree, the assistant changes the source. The window loads the new
    version by itself and the comment is marked as done.
 

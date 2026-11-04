@@ -136,7 +136,7 @@ try {
   // x marks done, x again opens it
   await key('x');
   check('x marks the comment done', !!(await until(async () => (await annots()).find(a => a.comment === 'smoke comment')?.done, 4000)));
-  check('the card then offers "x open again"', !!(await until(() => ev(`return /x open again/.test(d.querySelector('.pg .card')?.innerText || '')`), 3000)));
+  check('the card then shows the done pill and "x open again"', !!(await until(() => ev(`return /x open again/.test(d.querySelector('.pg .card')?.innerText || '') && !!d.querySelector('.pg .card .h .st.done')`), 3000)));
   await key('x');
   check('x again opens it', !!(await until(async () => (await annots()).find(a => a.comment === 'smoke comment')?.done === false, 4000)));
 

@@ -125,6 +125,8 @@
   .pg .card ins { color: #0b5d1e; background: #d4f5d4; text-decoration: none; font-weight: 600; }
   .pg .card .k { margin-top: 4px; font-size: 11px; color: #777; }
   .pg .card .t { font-size: 15px; font-weight: 700; color: #0050d0; }
+  .pg .card .t { white-space: nowrap; }
+  .pg .card .h .st { font-size: 12px; margin-left: 8px; vertical-align: 2px; }
   .pg .card .h .n { float: right; margin-left: 12px; }
   .pg .card .yours { color: #777; font-size: 12px; }
   .pg .card .yours b, .pg .card .rep.mine b { color: #777; font-weight: 600; }
@@ -1278,9 +1280,12 @@ function showCard() {
     if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}`, 'n'));
   }
   const r = it.a && theirs(it.a);
-  h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment' : ed && state.redo !== null ? 'edit your reply'
-                     : it.a ? (r ? r.from + ' replied' : it.a.done ? 'done, no reply' : 'your comment · ' + standing(it.a)[1]) + (r && it.a.done ? ' · done ✓' : '')
-                     : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't'));
+  const t = span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment' : ed && state.redo !== null ? 'edit your reply'
+                     : it.a ? (r ? r.from + ' replied' : it.a.done ? 'no reply' : 'your comment · ' + standing(it.a)[1])
+                     : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't');
+  // done is the green mark of the list, not more words; it stays on the line of the title
+  if (it.a?.done && !writing) t.append(span('span', 'done ✓', 'st done'));
+  h.append(t);
   if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);
   if (a && a.change === undefined && (a.was !== undefined || (a.lost && a.text)))

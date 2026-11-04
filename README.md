@@ -177,7 +177,9 @@ entry without `kind` is a highlight.
 `before` and `after` hold the letters and digits around the text, to find it
 again in a changed document (see "When the document changes"); `was` is the
 text as it was when it has changed since, and `lost` marks a comment whose
-text is not found any more. `change` marks a comment on a change (`a` on
+text is not found any more. `n` is the number of the comment, given when it is
+written; it never changes, and the window, `--read`, `--wait` and `--reply`
+use it. `change` marks a comment on a change (`a` on
 the card of a change, see "What changed"): it holds the text as it was before the change, and
 an empty `text` with a `change` means that the text was removed.
 
@@ -263,8 +265,9 @@ the command again.
 just-doc book.pdf --reply 2 "it converges only for a simple root" --from Ana
 ```
 
-adds a reply to comment 2: its number in the `--read` output, or its `id` from
-`--read --json`. `--from` is the name shown on the reply. `--reply` can be
+adds a reply to comment 2: its number (`#2` in the window, `[2]` in the
+`--read` output), or its `id` from `--read --json`. The number stays with the
+comment, also when the document changes and the comments move. `--from` is the name shown on the reply. `--reply` can be
 given several times in one command. The export writes the replies into the
 note of the highlight.
 
@@ -273,7 +276,7 @@ just-doc book.pdf --done 2
 ```
 
 marks comment 2 as done (`done` in the JSON file). Its highlight fades and
-it is greyed in the list, under "answered since your Ctrl+Enter". At your
+it is greyed in the list. At your
 next `Ctrl+Enter` the done comments that you have looked at leave the page
 and the list, so each round starts with what is still open; nothing leaves
 before that. `D` shows them again, and the
@@ -362,9 +365,10 @@ The copies are kept in the cache folder (`~/.cache/just-doc`).
 ### Rounds and history
 
 Every `Ctrl+Enter` starts a round, and just-doc keeps a copy of the document
-as it was then. The comment list puts what is new on top: the comments not
-handed over yet, then the ones answered since your last `Ctrl+Enter`, then
-the open ones; the older ones are greyed at the end.
+as it was then. The comment list is always in page order, top to bottom;
+the mark on each row says whether it is new, answered or still open, and
+the comments done before the last `Ctrl+Enter` are greyed. The changes that
+no comment asked for come after the comments.
 
 `gh` opens the history, newest round first. `j` / `k` move through the rounds,
 and the selected one shows the comments and replies you handed over, the

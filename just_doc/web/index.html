@@ -640,14 +640,19 @@ function fold(all) {
   $('list').querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
-// after a hand-over the list comes in groups: what is new first, what is older last;
-// 0 before the first hand-over. The comments are in page order inside a group.
+// how a comment stands to the last hand-over: 1 written since, 2 answered or done since,
+// 3 open, 4 done before it; 0 before the first hand-over
 function groupOf(a) {
   const since = roundStart();
   return !since ? 0 : Date.parse(a.created) > since ? 1
     : (a.replies || []).some(r => r.from && Date.parse(r.at) > since) || Date.parse(a.done_at) > since ? 2 : a.done ? 4 : 3;
 }
-const listOrder = () => state.annots.filter(listed).map(a => [groupOf(a), a]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+// the list is in page order, always: where a comment stands its mark on the row says
+const listOrder = () => state.annots.filter(listed);
+
+// the number of a new comment: one more than the highest. It stays with the comment, so
+// the window, --wait and --reply always mean the same comment by it.
+const nextNumber = () => Math.max(0, ...state.annots.map(a => a.n || 0)) + 1;
 
 function drawList() {
   const shown = listOrder(), hidden = state.annots.length - shown.length;
@@ -655,21 +660,14 @@ function drawList() {
   $('archive').textContent = state.archive ? '· with the done ones · D hides them' : hidden ? `· ${hidden} done · D shows them` : '';
   const list = $('list');
   list.replaceChildren();
-  const hhmm = new Date(roundStart()).toTimeString().slice(0, 5);
-  const TITLE = AT ? ['', 'written in this round', `answered in round ${AT}`, 'open', 'earlier']
-    : ['', 'new, not handed over yet', `answered since your Ctrl+Enter at ${hhmm}`, 'open', 'earlier'];
-  let last = -1;
   for (const a of shown) {
-    const g = groupOf(a);
-    if (g !== last && g) list.append(span('div', TITLE[g], 'grp' + (g === 4 ? ' old' : '')));
-    last = g;
     const it = document.createElement('div');
-    it.className = 'it' + (a.id === state.sel ? ' on' : '') + (a.done ? ' done' : '') + (last === 4 ? ' old' : '') + (unfolded(a) ? ' open' : '');
+    it.className = 'it' + (a.id === state.sel ? ' on' : '') + (a.done ? ' done' : '') + (groupOf(a) === 4 ? ' old' : '') + (unfolded(a) ? ' open' : '');
     it.dataset.id = a.id;
     // a closed row is two lines: where the comment stands, its page and text; and who spoke last
     const [key, word] = standing(a), quote = (a.text || a.change || '').replace(/\s+/g, ' ');
     const l1 = document.createElement('div'); l1.className = 'l1';
-    l1.append(span('span', word, 'st ' + key), 'p. ' + a.rects[0].p + (a.lost ? ' · text not found' : ''));
+    l1.append(span('span', word, 'st ' + key), span('b', '#' + a.n), ' p. ' + a.rects[0].p + (a.lost ? ' · text not found' : ''));
     if (quote) l1.append(span('span', (a.kind === 'strike' ? '✕ ' : '') + '«' + quote + '»', 'qq'));
     else if (a.kind === 'pin') l1.append(span('span', '📍 point', 'qq'));
     const r = (a.replies || []).at(-1), l2 = document.createElement('div');
@@ -1187,7 +1185,7 @@ function cursorPlace() {
   return w ? { p: c.p, x: w.x, y: w.y - w.h / 2 } : { p: currentPage(), x: 0, y: 0 };
 }
 
-// What n and p go through: the list as it is shown, from the top. The comments in their groups,
+// What n and p go through: the list as it is shown, from the top. The comments in page order,
 // each with the changes near it when it was answered, then the changes on their own.
 // What was done before this round is skipped, unless D shows it: it has nothing new to read.
 function navItems() {
@@ -1273,6 +1271,7 @@ function showCard() {
   const a = it.a || it.near, writing = ed && !state.replying, card = document.createElement('div');
   card.className = 'card' + (it.a ? '' : ' own') + (ed ? ' editing' : '');
   const h = span('div', '', 'h');
+  if (it.a) h.append(span('b', '#' + it.a.n + ' '));
   if (it.key) {
     // where it is among what n goes through; how much is left to look at the toolbar says.
     // A done comment of an earlier round, clicked, is not among them: no place to count.
@@ -1360,7 +1359,7 @@ function showCard() {
 function addFromChange() {
   const m = state.item.marks[0];
   const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: m.cut ? '' : m.now,
-              rects: m.rects.map(r => ({ ...r })), comment: '', change: m.was, created: new Date().toISOString() };
+              rects: m.rects.map(r => ({ ...r })), comment: '', change: m.was, created: new Date().toISOString(), n: nextNumber() };
   // removed text has nothing to point at: the comment stays where the thin mark is, like a rectangle
   if (m.cut) a.kind = 'box';
   // the comment box opens where the card is
@@ -1622,7 +1621,7 @@ document.addEventListener('mouseup', () => {
   const at = pin ? { x: drag0.x - box.left, y: drag0.y - box.top, w: 0, h: 0 } : r;
   for (const k of ['x', 'y', 'w', 'h']) rect[k] = Math.round(at[k] / state.scale * 100) / 100;
   const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind: pin ? 'pin' : 'box',
-              text: pin ? '' : textInside(pg, rect), rects: [rect], comment: '', created: new Date().toISOString() };
+              text: pin ? '' : textInside(pg, rect), rects: [rect], comment: '', created: new Date().toISOString(), n: nextNumber() };
   if (pin) a.near = lineAbove(pg, rect);
   state.annots.push(a);
   state.sel = a.id;
@@ -1636,7 +1635,7 @@ function addFromSelection(kind) {
   const cap = captureSelection();
   if (!cap) return null;
   const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: cap.text, rects: cap.rects,
-              comment: '', created: new Date().toISOString() };
+              comment: '', created: new Date().toISOString(), n: nextNumber() };
   if (kind) a.kind = kind;
   state.annots.push(a);
   setPieces(null);

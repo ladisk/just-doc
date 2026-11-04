@@ -101,9 +101,10 @@ Everything goes through these commands; do not edit the .comments.json file.
            reply (NAME): an earlier reply
            reply (author): the author's answer to it
 
-   3 is the number of the comment, p. 12 the page, and chapter.tex:140 the
-   place in the source when it is known (for markdown and HTML, and for
-   LaTeX with SyncTeX). "delete:" instead of "text:" means that the author wants this
+   3 is the number of the comment: it never changes, also when the comments
+   move in the document, and the author sees it in the window as #3. p. 12
+   is the page, and chapter.tex:140 is the place in the source when it is
+   known (for markdown and HTML, and for LaTeX with SyncTeX). "delete:" instead of "text:" means that the author wants this
    text removed. "area:" is a rectangle around a figure, an equation or code.
    "point:" is a spot on the page with no text, such as a place where
    something is missing; it gives the text line just above the spot.
@@ -153,8 +154,22 @@ def comments_path(doc):
 def load_comments(doc):
     path = comments_path(doc)
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        numbered(data.setdefault("annots", []))
+        return data
     return {"annots": []}
+
+
+def numbered(annots):
+    """Give each comment without a number ``n`` the next free one, in the order they were written.
+
+    The number stays with the comment: the window shows it, --wait prints it and
+    --reply takes it, also after the comments have moved in the document.
+    """
+    top = max((a["n"] for a in annots if isinstance(a.get("n"), int)), default=0)
+    for a in sorted((a for a in annots if not isinstance(a.get("n"), int)), key=lambda a: stamp_key(a.get("created"))):
+        top += 1
+        a["n"] = top
 
 
 def save_comments(doc, annots):
@@ -165,12 +180,10 @@ def save_comments(doc, annots):
 
 
 def find_comment(doc, annots, ref):
-    """Return the comment ``ref``: its number in the file or its id."""
+    """Return the comment ``ref``: its number ``n`` or its id."""
     for a in annots:
-        if a.get("id") == ref:
+        if a.get("id") == ref or (ref.isdigit() and a.get("n") == int(ref)):
             return a
-    if ref.isdigit() and 0 < int(ref) <= len(annots):
-        return annots[int(ref) - 1]
     raise RuntimeError(f"no comment {ref} in {comments_path(doc).name}")
 
 
@@ -231,6 +244,9 @@ def keep_replies(doc, annots):
     old = {a.get("id"): a for a in load_comments(doc)["annots"]}
     for a in annots:
         was = old.get(a.get("id"), {})
+        # a window that was opened before the comments had numbers
+        if "n" not in a and "n" in was:
+            a["n"] = was["n"]
         missing = [r for r in was.get("replies", []) if r not in a.get("replies", [])]
         if missing:
             a["replies"] = sorted(a.get("replies", []) + missing, key=lambda r: stamp_key(r.get("at")))
@@ -799,6 +815,7 @@ def make_handler(tabs):
                 return
             with WRITING:
                 keep_replies(doc, obj["annots"])
+                numbered(obj["annots"])
                 save_comments(doc, obj["annots"])
             self._json(200, {"ok": True, "n": len(obj["annots"])})
 
@@ -883,7 +900,7 @@ def reply(doc, replies, done, name, port):
     """
     found = running(doc, port)
     annots = load_comments(doc)["annots"]
-    # numbers are taken as they are now, also when a new comment comes in between
+    # a number stays with its comment, so it means the one --wait printed
     changes = [(find_comment(doc, annots, ref).get("id", ref), text) for ref, text in replies]
     changes += [(find_comment(doc, annots, ref).get("id", ref), None) for ref in done]
     for ref, text in changes:
@@ -1076,14 +1093,14 @@ def read(doc, as_json, only_open=False):
     else:
         for a in annots:
             a["source"] = source_line(doc, a["rects"][0], centre=a.get("kind") in ("box", "pin"))
-    for i, a in enumerate(annots, 1):
-        a["number"], a["open"] = i, is_open(a)
+    for a in annots:
+        a["open"] = is_open(a)
     shown = [a for a in annots if a["open"] or not only_open]
     if as_json:
         print(json.dumps(shown, ensure_ascii=False, indent=1))
         return
     for a in shown:
-        i = a["number"]
+        i = a["n"]
         where = f"p. {a['rects'][0]['p']}" + (f"  {a['source']}" if a["source"] else "")
         kind = {"box": "area", "strike": "delete", "pin": "point"}.get(a.get("kind"), "text")
         text = a["text"] or "(no text inside)"
@@ -1126,7 +1143,7 @@ def main():
     ap.add_argument("--guide", action="store_true",
                     help="print how a coding assistant reviews a document with you through just-doc")
     ap.add_argument("--reply", nargs=2, action="append", metavar=("N", "TEXT"),
-                    help="add a reply to comment N (its number in --read, or its id); can be given several times")
+                    help="add a reply to comment N (its number in --read and in the window, or its id); can be given several times")
     ap.add_argument("--done", action="append", metavar="N", default=[],
                     help="mark comment N as done: its highlight fades and leaves at the next Ctrl+Enter; can be given several times")
     ap.add_argument("--from", dest="name", default="reply", metavar="NAME", help="with --reply: the name on the reply")

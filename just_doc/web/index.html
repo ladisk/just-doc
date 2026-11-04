@@ -43,7 +43,7 @@
   #news.lost { display: inline-block; background: #f0a000; color: #222; }
   #news.new { background: #2f7bff; color: #fff; }
   .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
-  #pages { padding: calc(var(--bar) + 10px) var(--side) 34px 0; box-sizing: border-box; display: flex; flex-direction: column;
+  #pages { padding: calc(var(--bar) + 10px) calc(var(--side) + 2 * var(--shift, 0px)) 34px 0; box-sizing: border-box; display: flex; flex-direction: column;
            align-items: center; gap: 12px; min-width: max-content; }
   .pg { position: relative; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); flex: none; }
   .pg canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
@@ -353,6 +353,17 @@ function applyScale() {
     pgs[i].style.setProperty('--scale-factor', state.scale);
   }
   $('zval').textContent = Math.round(state.scale * 100) + ' %';
+  placePages();
+}
+
+// The pages stand in the middle of the window. When the margin on their right is too narrow
+// for the card beside them, and the room on both sides together is wide enough, they move
+// left as far as the card needs.
+function placePages() {
+  const free = document.documentElement.clientWidth - $('side').offsetWidth - base.width * state.scale;
+  const need = CARD_MARGIN + 20;   // the card and a gap on both sides of it
+  const shift = free / 2 >= need || free < need + 12 ? 0 : need - free / 2;
+  $('pages').style.setProperty('--shift', shift + 'px');
 }
 
 async function renderPage(i) {
@@ -1835,10 +1846,11 @@ function toggleSide() {
   const off = document.body.classList.toggle('no-side');
   store.set('noSide', off);
   hint(off ? 'comment list hidden (c shows it)' : '');
-  // the margin beside the page changes, and with it the place of the card
+  // the margin beside the page changes, and with it the place of the pages and of the card
+  placePages();
   showCard();
 }
-addEventListener('resize', () => { if (state.item || state.editing) showCard(); });
+addEventListener('resize', () => { placePages(); if (state.item || state.editing) showCard(); });
 // hides the highlights to read the clean page; the selected one stays visible
 function toggleHl() { document.body.classList.toggle('no-hl'); setMode(state.mode); }
 function toggleHelp() {

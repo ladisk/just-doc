@@ -174,6 +174,15 @@ try {
   await key('p'); await sleep(400);
   const f3 = await framed(), c3 = await cardText();
   check('p returns to the first comment', f3 === f1 && marker(c3) === 1, `row=${f3} card=${(c3 || '').slice(0, 80)}`);
+
+  // a window where the margin right of a centred page is too narrow for the card, but both
+  // margins together are wide enough: the pages move left and the card stands beside them
+  const geo = await ev(`return [innerWidth, d.documentElement.clientWidth, d.getElementById('side').offsetWidth, d.querySelector('.pg').offsetWidth]`);
+  const want = geo[2] + geo[3] + 480;
+  await cmd('Emulation.setDeviceMetricsOverride', { width: geo[0] + want - geo[1], height: 950, deviceScaleFactor: 1, mobile: false });
+  await sleep(600);
+  const beside = await ev(`const c=d.querySelector('.pg .card'), pg=c?.parentElement; return c ? [c.offsetLeft >= pg.offsetWidth, pg.getBoundingClientRect().left] : null`);
+  check('the card stands beside the page, which moved left', beside?.[0] && beside[1] > 0, JSON.stringify(beside));
   check('no uncaught exceptions during the run', excs.length === 0, excs[0]);
 } catch (e) {
   check('test run', false, e.stack || String(e));

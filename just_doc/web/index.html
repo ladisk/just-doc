@@ -223,7 +223,7 @@
   <span id="status">loading …</span>
 </div>
 <div id="pages"></div>
-<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>K</kbd> preview &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="findbox">/<input id="q" type="text" spellcheck="false"></span><span id="findinfo"></span><span id="keys"><kbd>a</kbd> comment/reply &nbsp;<kbd>s</kbd> strike &nbsp;<kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> move &nbsp;<kbd>v</kbd>/<kbd>V</kbd> select &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>m</kbd> changes &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>/</kbd> search &nbsp;<kbd>t</kbd> contents &nbsp;<kbd>Ctrl</kbd>+<kbd>o</kbd> back &nbsp;<kbd>K</kbd> preview &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="side"><h1>Comments (<span id="count">0</span>) <small id="archive"></small></h1><div id="list"></div></div>
 <div id="peek"><div class="h"></div><canvas></canvas></div>
 <div id="toc"><h1>Contents <small>j / k move · Enter go · Esc close</small></h1><div id="toclist"></div></div>
@@ -233,12 +233,10 @@
   <h2>Keys — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
   <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
   <table>
-    <tr><td><kbd>a</kbd></td><td>comment on the selected text; on a comment: reply once it is answered, else edit it</td></tr>
-    <tr><td><kbd>A</kbd></td><td>reply to the selected comment, the one of the card or the one under the cursor</td></tr>
-    <tr><td><kbd>E</kbd></td><td>edit your comment; the other side does not see the change, so after an answer reply instead</td></tr>
+    <tr><td><kbd>a</kbd></td><td>comment on the selected text; on a comment (selected, of the card or under the cursor): edit what you wrote last while the assistant has not seen it, else reply</td></tr>
     <tr><td><kbd>x</kbd></td><td>mark the comment done yourself, when the answer needs no reply; <kbd>x</kbd> again opens it</td></tr>
     <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list, or on a change the group of changes; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
-    <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it; <kbd>A</kbd> on a comment: reply</td></tr>
+    <tr class="sub"><td><kbd>a</kbd></td><td>on a change: comment on it</td></tr>
     <tr><td><kbd>gh</kbd></td><td>history: the rounds so far, with what was handed over, answered and changed; <kbd>Enter</kbd> shows the document as it was at the end of a round</td></tr>
     <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
     <tr><td><kbd>q</kbd> <kbd>y</kbd></td><td>stop just-doc and close its windows</td></tr>
@@ -291,7 +289,7 @@
     <tr><td><span class="st wait">not seen yet</span></td><td>handed over, but no <code>just-doc --wait</code> has shown it to the assistant yet</td></tr>
     <tr><td><span class="st skip">seen 10:42, no reply</span></td><td>the assistant was shown it at that time and neither answered nor marked it done</td></tr>
     <tr><td><span class="st new">new reply</span></td><td>the assistant answered and you have not looked at it yet; <span class="st new">new: done</span> it marked it done</td></tr>
-    <tr><td><span class="st read">answered</span></td><td>the assistant spoke last and you have looked at it; answer with <kbd>A</kbd> if you do not agree, or mark it done with <kbd>x</kbd></td></tr>
+    <tr><td><span class="st read">answered</span></td><td>the assistant spoke last and you have looked at it; answer with <kbd>a</kbd> if you do not agree, or mark it done with <kbd>x</kbd></td></tr>
     <tr><td><span class="st done">done ✓</span></td><td>the assistant or you (<kbd>x</kbd>) marked it done; it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
     <tr><td><span class="st chg">change</span></td><td>a change in the document since the last hand-over that no comment asked for</td></tr>
   </table>
@@ -319,7 +317,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(store.key(k), JSON.stringify(v)); } catch {} },
 };
 
-const state = { scale: store.get('scale', 1.5), annots: [], sel: null, undo: [], editing: null,
+const state = { scale: store.get('scale', 1.5), annots: [], sel: null, undo: [], editing: null, redo: null,
                 mode: 'normal', cursor: null, anchor: null, pieces: null, pending: '', count: '', wantX: null, find: null, tocAt: 0, single: 0, scaleBefore: 0, cursorTo: null, back: [], fwd: [],
                 // the list: all rows open (zR), rows opened or closed one by one (za), the selected row closed
                 allOpen: false, flip: new Set(), selFolded: false, chgOpen: false };
@@ -1280,13 +1278,11 @@ function showCard() {
     if (at >= 0) h.append(span('span', `${at + 1} of ${items.length}`, 'n'));
   }
   const r = it.a && theirs(it.a);
-  h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment'
+  h.append(span('span', ed && state.fresh ? 'new comment' : writing ? 'edit your comment' : ed && state.redo !== null ? 'edit your reply'
                      : it.a ? (r ? r.from + ' replied' : it.a.done ? 'done, no reply' : 'your comment · ' + standing(it.a)[1]) + (r && it.a.done ? ' · done ✓' : '')
                      : (it.marks.length > 1 ? `${it.marks.length} changes` : 'a change') + (it.near ? ' near your comment' : ''), 't'));
   if (!a) h.append(' ', span('b', 'not asked for'));
   card.append(h);
-  if (writing && !state.fresh && (r || ed.done))
-    card.append(span('div', `${r ? r.from : 'the other side'} does not see a change of your comment; A replies`, 'none'));
   if (a && a.change === undefined && (a.was !== undefined || (a.lost && a.text)))
     card.append(span('div', (a.was !== undefined ? 'before: ' : 'before, not found now: ') + '«' + (a.was ?? a.text) + '»', 'was'));
   if (a && !writing) {
@@ -1297,6 +1293,8 @@ function showCard() {
   const rs = it.a ? it.a.replies || [] : [];
   if (rs.length > 3) card.append(span('div', `… ${rs.length - 3} earlier`, 'none'));
   for (const r of rs.slice(-3)) {
+    // the reply in the field is not shown twice
+    if (ed && state.redo !== null && r === rs[state.redo]) continue;
     const d = span('div', '', 'rep' + (r.from ? '' : ' mine'));
     d.append(span('b', (r.from || 'you') + ': '), r.text);
     card.append(d);
@@ -1311,8 +1309,8 @@ function showCard() {
   } else {
     const k = document.createElement('div');
     k.className = 'k';
-    k.innerHTML = (AT ? '' : it.a ? `<kbd>A</kbd> reply &nbsp;<kbd>E</kbd> edit &nbsp;<kbd>x</kbd> ${it.a.done ? 'open again' : 'done'} &nbsp;`
-                         : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;` + (it.near ? '<kbd>A</kbd> reply to your comment &nbsp;' : ''))
+    k.innerHTML = (AT ? '' : it.a ? `<kbd>a</kbd> ${draft(it.a) ? 'edit' : 'reply'} &nbsp;<kbd>x</kbd> ${it.a.done ? 'open again' : 'done'} &nbsp;`
+                         : `<kbd>a</kbd> comment on ${it.marks.length > 1 ? 'the first' : 'it'} &nbsp;`)
       + '<kbd>n</kbd> next &nbsp;<kbd>p</kbd> back &nbsp;<kbd>gb</kbd> page as it was &nbsp;<kbd>Esc</kbd> close';
     card.append(k);
   }
@@ -1660,11 +1658,18 @@ function target() {
                                                          && w.y >= r.y && w.y <= r.y + r.h))?.id || null;
 }
 
-// a comment the other side answered or marked done gets a reply: a change of the comment
-// itself would not reach them
+// whether the author spoke last and the other side has not seen it: not handed over, and
+// not shown by a --wait. Only then is a change of it still worth making.
+const draft = a => !lastFrom(a) && !a.done && (!rounds.length || spokeAt(a) > roundStart()) && seenAt(a) < spokeAt(a);
+
+// a: what you wrote last, the comment or your last reply, is changed while the other side has
+// not seen it; after that it gets a new reply, as a change would not reach them
 function editOrReply(id) {
   const a = state.annots.find(x => x.id === id);
-  if (a) openEditor(id, false, !!(lastFrom(a) || a.done));
+  if (!a) return;
+  if (!draft(a)) openEditor(id, false, true);
+  else if ((a.replies || []).length) openEditor(id, false, true, a.replies.length - 1);
+  else openEditor(id);
 }
 
 // x: you mark a comment done yourself, when the answer needs no reply; x again opens it.
@@ -1685,9 +1690,10 @@ function toggleDone(id) {
 }
 
 // fresh: the highlight was made together with this comment, so Esc removes it again;
-// reply: the field adds a reply to the comment and leaves the comment as it is.
+// reply: the field adds a reply to the comment and leaves the comment as it is;
+// redo: the number of your reply that the field changes, in place of a new reply.
 // The field is at the bottom of the card of the comment.
-function openEditor(id, fresh = false, reply = false) {
+function openEditor(id, fresh = false, reply = false, redo = null) {
   if (AT) { readOnly(); return; }
   const a = state.annots.find(x => x.id === id);
   if (!a) return;
@@ -1695,8 +1701,9 @@ function openEditor(id, fresh = false, reply = false) {
   state.editing = id;
   state.fresh = fresh;
   state.replying = reply;
+  state.redo = redo;
   select(id);
-  $('etext').value = reply ? '' : a.comment;
+  $('etext').value = redo !== null ? a.replies[redo].text : reply ? '' : a.comment;
   $('etext').placeholder = reply ? 'reply …' : 'comment …';
   showCard();
   $('etext').focus();
@@ -1708,7 +1715,16 @@ function closeEditor(commit) {
   const a = state.annots.find(x => x.id === state.editing);
   state.editing = null;
   const said = $('etext').value.trim();
-  if (a && state.replying) {
+  if (a && state.replying && state.redo !== null) {
+    // an empty field takes the reply away
+    if (commit) {
+      if (said) a.replies[state.redo].text = said; else a.replies.splice(state.redo, 1);
+      redraw();
+      showNews();
+      save();
+    }
+  }
+  else if (a && state.replying) {
     if (commit && said) {
       (a.replies ||= []).push({ text: said, at: new Date().toISOString() });
       // an answer opens a comment that was done; false and not removed, so the server does not put the mark back
@@ -3058,14 +3074,6 @@ function handleKey(e) {
     case 'V': e.preventDefault(); startVisual('vline'); return;
     case 'C': e.preventDefault(); toggleHl(); return;
     case 'D': e.preventDefault(); state.archive = !state.archive; drawList(); showNews(); return;
-    case 'A':
-      e.preventDefault();
-      { const id = target(); if (id) openEditor(id, false, true); else hint('go to a comment first (n)'); }
-      return;
-    case 'E':
-      e.preventDefault();
-      { const id = target(); if (id) openEditor(id); else hint('go to a comment first (n)'); }
-      return;
     case 'P': e.preventDefault(); setSingle(!state.single); return;
     case 'm': case 'M': e.preventDefault(); showChanges(k === 'm' ? BASE : 'commit'); return;
     // previous / next tab, as the buffer keys of many nvim setups

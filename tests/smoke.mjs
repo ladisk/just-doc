@@ -120,12 +120,19 @@ try {
   await key('n');
   const card = await until(() => ev(`const c=d.querySelector('.pg .card'); return c && c.textContent.includes('bot replied')`), 4000);
   check('n shows a card with "bot replied"', !!card, await ev(`return d.querySelector('.pg .card')?.textContent`));
-  await key('A');
+  await key('a');
   const inCard = await until(() => ev(`return !!d.querySelector('.pg .card #etext')`), 3000);
-  check('A opens a reply field inside the card', !!inCard);
+  check('a opens a reply field inside the card', !!inCard);
   await type('author reply');
   const ar = await until(async () => (await annots()).some(a => (a.replies || []).some(r => r.text === 'author reply' && !r.from)), 4000);
   check('author reply saved (no "from")', !!ar, JSON.stringify((await annots())[0]?.replies));
+  // not handed over yet: a again edits that reply, it does not add one
+  await key('a');
+  const again = await until(() => ev(`return d.getElementById('etext').value`), 3000);
+  check('a again opens the reply for editing', again === 'author reply', again);
+  await type('author reply');
+  const one = (await annots()).find(a => a.comment === 'smoke comment');
+  check('editing a reply adds none', (one?.replies || []).filter(r => !r.from).length === 1, JSON.stringify(one?.replies));
   // x marks done, x again opens it
   await key('x');
   check('x marks the comment done', !!(await until(async () => (await annots()).find(a => a.comment === 'smoke comment')?.done, 4000)));

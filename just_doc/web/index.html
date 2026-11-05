@@ -332,7 +332,9 @@ const wordCache = {};  // page number -> word list, for visual mode; dropped whe
 let zoomTimer = 0;
 
 const pdf = await pdfjsLib.getDocument(AT ? api('/api/before') + (DOC ? '&' : '?') + 'k=round&n=' + (AT + 1) : api('/doc')).promise;
-const base = (await pdf.getPage(1)).getViewport({ scale: 1 });
+const sizes = [];      // 1-based: {width, height} of the page in points
+for (let i = 1; i <= pdf.numPages; i++) sizes[i] = (await pdf.getPage(i)).getViewport({ scale: 1 });
+const widest = Math.max(...sizes.slice(1).map(z => z.width));
 $('pcount').textContent = pdf.numPages;
 let info = {};
 try { info = await (await fetch(api('/api/info'))).json(); document.title = info.name + ' – just-doc'; } catch {}
@@ -348,8 +350,8 @@ for (let i = 1; i <= pdf.numPages; i++) {
 
 function applyScale() {
   for (let i = 1; i <= pdf.numPages; i++) {
-    pgs[i].style.width = base.width * state.scale + 'px';
-    pgs[i].style.height = base.height * state.scale + 'px';
+    pgs[i].style.width = sizes[i].width * state.scale + 'px';
+    pgs[i].style.height = sizes[i].height * state.scale + 'px';
     pgs[i].style.setProperty('--scale-factor', state.scale);
   }
   $('zval').textContent = Math.round(state.scale * 100) + ' %';
@@ -360,7 +362,7 @@ function applyScale() {
 // for the card beside them, and the room on both sides together is wide enough, they move
 // left as far as the card needs.
 function placePages() {
-  const free = document.documentElement.clientWidth - $('side').offsetWidth - base.width * state.scale;
+  const free = document.documentElement.clientWidth - $('side').offsetWidth - widest * state.scale;
   const need = CARD_MARGIN + 20;   // the card and a gap on both sides of it
   const shift = free / 2 >= need || free < need + 12 ? 0 : need - free / 2;
   $('pages').style.setProperty('--shift', shift + 'px');
@@ -386,7 +388,7 @@ async function renderPage(i) {
       layer.className = 'lk';
       for (const l of links[i]) {
         const d = document.createElement('div');
-        d.style.cssText = `left:${l.x / base.width * 100}%;top:${l.y / base.height * 100}%;width:${l.w / base.width * 100}%;height:${l.h / base.height * 100}%`;
+        d.style.cssText = `left:${l.x / flat.width * 100}%;top:${l.y / flat.height * 100}%;width:${l.w / flat.width * 100}%;height:${l.h / flat.height * 100}%`;
         layer.appendChild(d);
       }
       pgs[i].appendChild(layer);
@@ -477,7 +479,7 @@ function setSingle(on, fit = true) {
       state.scaleBefore = state.scale;
       store.set('scaleBefore', state.scale);
       const width = window.innerWidth - $('side').offsetWidth - 24, height = window.innerHeight - $('bar').offsetHeight - 44;
-      setScale(Math.min(width / base.width, height / base.height));
+      setScale(Math.min(width / sizes[p].width, height / sizes[p].height));
     }
     window.scrollTo(0, 0);
   } else {
@@ -2544,7 +2546,7 @@ async function resolveDest(d) {
   const page = Number.isInteger(dest[0]) ? dest[0] + 1 : await pdf.getPageIndex(dest[0]) + 1;
   const kind = dest[1] && dest[1].name;
   const top = kind === 'XYZ' ? dest[3] : kind === 'FitH' || kind === 'FitBH' ? dest[2] : null;
-  return { page, y: typeof top === 'number' ? Math.max(0, base.height - top) : 0 };
+  return { page, y: typeof top === 'number' ? Math.max(0, sizes[page].height - top) : 0 };
 }
 
 const linkAt = (p, x, y) => (links[p] || []).find(l => x >= l.x - 1 && x <= l.x + l.w + 1 && y >= l.y - 1 && y <= l.y + l.h + 1);

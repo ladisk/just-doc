@@ -190,6 +190,10 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
     && c2.anchor?.id === 'plot' && c2.anchor.at?.length === 2 && Math.abs(c2.anchor.at[0] - 0.5) < 0.05, JSON.stringify(c2));
   check('both are marked over the page, outside its layout', !!(await until(() => ev(`return d.querySelectorAll('#__jd_marks [data-id]').length === 2`), 3000)));
   check('the page narrows for the panel', !!(await top(`return document.querySelector('iframe.on').getBoundingClientRect().width <= innerWidth - 340`)));
+  check('with the panel open the plot fills the page (page.css), with no sideways scrolling', !!(await until(() => ev(
+    `const W = d.documentElement.clientWidth; return Math.abs(d.getElementById('plot').getBoundingClientRect().width - (W - 40)) < 2
+      && d.documentElement.scrollWidth <= W && d.getElementById('intro').getBoundingClientRect().width <= 960`), 5000)),
+    await ev(`return [d.documentElement.clientWidth, d.documentElement.scrollWidth, d.getElementById('plot').getBoundingClientRect().width]`));
   check('the plot still runs', !!(await ev(`return !!d.querySelector('#plot .main-svg') && typeof d.getElementById('plot')._fullLayout === 'object'`)));
   await ev(`d.querySelector('textarea[name=long]').dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
   check('Ctrl+Enter ends --live --wait', (await until(() => wexit !== null, 15000)) && wexit === 0, wout.slice(-300));
@@ -231,11 +235,30 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   rd = run('t1', doc, '--live', '--read');
   check('--live --read says it is detached', /\(detached/.test(rd.stdout), rd.stdout);
 
+  // --shot: a picture of the page as it looks live, without the window
+  const png = join(tmp, 'shot.png');
+  const sh = spawnSync(venv, [doc, '--shot', png, '--size', '900x700'], { env: env('t1'), encoding: 'utf8', timeout: 120000 });
+  const head = existsSync(png) ? readFileSync(png).subarray(0, 24) : Buffer.alloc(0);
+  check('--shot saves a PNG of the size asked for', sh.status === 0 && head.subarray(1, 4).toString() === 'PNG'
+    && head.readUInt32BE(16) === 900 && head.readUInt32BE(20) === 700, sh.stdout + sh.stderr);
+  check('--shot opens no tab', (await (await fetch(base + '/api/tabs')).json()).tabs.length === 1);
+  const noBrowser = /^just-doc: no browser to take a screenshot here; check the layout in the HTML\n$/;
+  let ns = spawnSync(venv, [doc, '--shot', join(tmp, 'x.png')], { env: { ...env('t1'), PATH: '/nonexistent' }, encoding: 'utf8' });
+  check('--shot without a browser: status 1 and one clear line', ns.status === 1 && noBrowser.test(ns.stderr), ns.stderr);
+  const fake = join(tmp, 'fakebin');
+  mkdirSync(fake);
+  writeFileSync(join(fake, 'chromium'), '#!/bin/sh\necho "no usable sandbox" >&2\nexit 1\n', { mode: 0o755 });
+  ns = spawnSync(venv, [doc, '--shot', join(tmp, 'x.png')], { env: { ...env('t1'), PATH: fake }, encoding: 'utf8' });
+  check('--shot with a browser that cannot start: the same line', ns.status === 1 && noBrowser.test(ns.stderr), ns.stderr);
+
   // 7. --hc-terminal: the last document opened or changed from a terminal
   run('t1', docB, '--live');
   run('t2', docC, '--live');
   const ids = Object.fromEntries((await (await fetch(base + '/api/tabs')).json()).tabs.map(t => [t.name, t.id]));
   check('three live tabs', Object.keys(ids).length === 3, JSON.stringify(ids));
+  check('the shown live tab has the live mark, the others a dot', !!(await until(() => top(
+    `const t = [...document.querySelectorAll('.tab')]; return t.filter(x => x.classList.contains('on')).every(x => x.querySelector('i')?.textContent === 'live')
+      && t.filter(x => !x.classList.contains('on')).length === 2 && t.filter(x => !x.classList.contains('on')).every(x => x.querySelector('i.dot') && !x.querySelector('i').textContent)`), 5000)));
   // no hyprctl on the PATH, so no real window is raised
   const hc = term => spawnSync(venv, ['--hc-terminal', term, '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });

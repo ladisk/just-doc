@@ -10,6 +10,8 @@
          border-right: 1px solid #45484d; }
   .tab.on { background: #525659; color: #fff; }
   .tab i { font-style: normal; background: #1f8f4e; color: #fff; border-radius: 8px; padding: 0 6px; margin-right: 6px; font-size: 11px; }
+  /* a live tab that is not shown: a dot in place of the "live" mark */
+  .tab i.dot { display: inline-block; width: 8px; height: 8px; padding: 0; margin: 0 8px 0 4px; border-radius: 50%; vertical-align: 1px; }
   .tab b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; }
   #keys { margin-left: auto; padding: 0 10px; white-space: nowrap; }
   kbd { font: 11px ui-monospace, monospace; background: #45484d; color: #e8e8e8; border-radius: 3px; padding: 0 4px; }
@@ -85,7 +87,11 @@ function draw() {
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
     // a page shown live, with its scripts running
-    if (t.live) { const i = document.createElement('i'); i.textContent = 'live'; el.prepend(i); }
+    if (t.live) {
+      const i = document.createElement('i');
+      if (t.id === active) i.textContent = 'live'; else i.className = 'dot';
+      el.prepend(i);
+    }
     if (news[t.id]) { const b = document.createElement('b'); b.textContent = (done[t.id] ? '✓ ' : '') + news[t.id]; el.appendChild(b); }
     el.title = t.path + (t.live ? ' (live page, loaded again when the file changes)' : '');
     el.onclick = () => show(t.id);

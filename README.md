@@ -11,6 +11,7 @@ just-doc book.pdf --export # write book.commented.pdf with the comments inside
 just-doc notes.md          # a markdown file works the same way
 just-doc slides.html       # and an HTML file, such as a slide deck
 just-doc page.html --live  # an HTML page as it is, scripts running, to comment and answer
+just-doc page.html --shot page.png   # a picture of that page, to check it before showing it
 just-doc                   # list the open documents; open the window again if it was closed
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
@@ -485,8 +486,8 @@ file again to make the PDF again.
 
 `just-doc page.html --live` shows an HTML page as it is, with its scripts
 running, as a tab of the just-doc window: a Plotly plot zooms, a three.js model
-turns. The tab carries a green `live` mark, and the tab bar shows also when the
-live page is the only tab. Its comments are kept apart from those of the
+turns. The tab carries a green `live` mark, a green dot while another tab is
+shown, and the tab bar shows also when the live page is the only tab. Its comments are kept apart from those of the
 PDF of the same file (see "Comments on a live page"); without `--live` the
 same file is printed to a PDF for commenting as before, and both can be open
 at the same time.
@@ -500,10 +501,10 @@ just-doc serves Plotly and three.js at fixed addresses, so a page that an
 assistant writes needs neither the internet nor copies of them:
 
 ```text
-/_lib/page.css                         a small style sheet: readable width, light and
-                                       dark, tables, and the classes card, grid, stat,
-                                       plot (a 480 px high box) and view (70 % of the
-                                       window); body class="wide" uses the full width
+/_lib/page.css                         a small style sheet: a readable text column, light
+                                       and dark, tables, and the classes card, grid, stat,
+                                       plot (480 px high), view (75 % of the window high),
+                                       controls and pair; plots and views use the full width
 /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
                                        dark and the width of the window by themselves
                                        (colours in the layout and config.responsive win)
@@ -530,27 +531,69 @@ needs no import map. A plot:
 </script>
 ```
 
-and a model that turns with the mouse:
+and a model that turns with the mouse, with its controls above it:
 
 ```html
 <!doctype html>
 <meta charset="utf-8">
 <title>Part</title>
 <link rel="stylesheet" href="/_lib/page.css">
+<h1>Bracket</h1>
+<div class="controls">
+  <label>Scale <input id="scale" type="range" min="0.2" max="2" step="0.1" value="1"> <output id="scale-v">1.0</output></label>
+  <label><input id="wire" type="checkbox" class="toggle"> wireframe</label>
+</div>
 <div id="view" class="view"></div>
+<p>What the view shows and what to look at.</p>
 <script type="module">
   import * as THREE from '/_lib/three/three.module.js';
   import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
-  const box = document.getElementById('view'), w = box.clientWidth, h = box.clientHeight;
+  const box = document.getElementById('view');
   const renderer = new THREE.WebGLRenderer({antialias: true});
-  renderer.setSize(w, h); box.append(renderer.domElement);
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+  box.append(renderer.domElement);
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   camera.position.set(3, 2, 4);
-  scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+  const mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial());
+  scene.add(mesh);
   const controls = new OrbitControls(camera, renderer.domElement);
+  // the view follows the width of the page, which narrows while the comment panel is open
+  new ResizeObserver(() => {
+    renderer.setSize(box.clientWidth, box.clientHeight);
+    camera.aspect = box.clientWidth / box.clientHeight;
+    camera.updateProjectionMatrix();
+  }).observe(box);
+  const scale = document.getElementById('scale');
+  scale.oninput = () => {
+    mesh.scale.setScalar(+scale.value);
+    document.getElementById('scale-v').value = (+scale.value).toFixed(1);
+  };
+  document.getElementById('wire').onchange = e => mesh.material.wireframe = e.target.checked;
   renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 </script>
 ```
+
+### Layout
+
+`just-doc page.html --shot page.png [--size 1500x900]` saves a picture of the
+page as it looks live, so an assistant can check the layout before it shows
+the page. The page is served by a just-doc inside the command, so `/_lib/`
+works, and a headless Chromium, Brave or Chrome draws it; it waits until the
+page is still (plots drawn), up to eight seconds of page time, with WebGL in
+software. Nothing opens in the window. Without a browser that starts, the
+command ends with status 1 and "no browser to take a screenshot here; check
+the layout in the HTML".
+
+Decide the layout for each page. What matters most (a 3D model, a plot) gets
+the full width: `page.css` gives `.plot` and `.view` the full width of the page
+and keeps text in a readable column. The page narrows while the comment panel
+is open; Plotly follows it by itself, a three.js view with a `ResizeObserver`
+as in the example. The sliders, choices and switches of a plot or a view
+usually go in a bar above it, `<div class="controls">`. Put parts side by side
+only when each still has enough room: `<div class="pair">` (or a `.grid`)
+puts two side by side while each gets 560 px, otherwise one above the other.
+A control needs a name only when its value should be handed over with
+`Ctrl+Enter`. Do not enable damping in `OrbitControls`: the model must stop
+when the user lets go.
 
 ### Answers from a live page
 

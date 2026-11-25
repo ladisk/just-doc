@@ -15,6 +15,9 @@ Usage
                                  running, and load it again when it changes;
                                  --live with --wait, --read, --reply, --done:
                                  the comments and answers of that page
+    just-doc page.html --shot p.png
+                                 save a picture of the page as it looks live
+                                 (--size 1500x900), to check it; opens nothing
     just-doc book.pdf --read     print the comments (with source lines if
                                  book.synctex.gz is next to the PDF)
     just-doc book.pdf --export   write book.commented.pdf with the comments
@@ -198,10 +201,10 @@ machine without a display (over ssh) no window opens: the author sees the
 page from their own machine through ssh. Files next to the page can be linked by relative paths.
 These are served by just-doc; use them instead of the internet:
 
-    /_lib/page.css                         a small style sheet: readable width, light and
-                                           dark, tables, and the classes card, grid, stat,
-                                           plot (a 480 px high box) and view (70 % of the
-                                           window); body class="wide" uses the full width
+    /_lib/page.css                         a small style sheet: a readable text column, light
+                                           and dark, tables, and the classes card, grid, stat,
+                                           plot (480 px high), view (75 % of the window high),
+                                           controls and pair; plots and views use the full width
     /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
                                            dark and the width of the window by themselves
                                            (colours in the layout and config.responsive win)
@@ -224,25 +227,64 @@ A plot:
         yaxis: {type: 'log', title: {text: '|H|'}}}, {responsive: true});
     </script>
 
-A model that turns with the mouse:
+A model that turns with the mouse, with its controls above it:
 
     <!doctype html>
     <meta charset="utf-8">
     <title>Part</title>
     <link rel="stylesheet" href="/_lib/page.css">
+    <h1>Bracket</h1>
+    <div class="controls">
+      <label>Scale <input id="scale" type="range" min="0.2" max="2" step="0.1" value="1"> <output id="scale-v">1.0</output></label>
+      <label><input id="wire" type="checkbox" class="toggle"> wireframe</label>
+    </div>
     <div id="view" class="view"></div>
+    <p>What the view shows and what to look at.</p>
     <script type="module">
       import * as THREE from '/_lib/three/three.module.js';
       import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
-      const box = document.getElementById('view'), w = box.clientWidth, h = box.clientHeight;
+      const box = document.getElementById('view');
       const renderer = new THREE.WebGLRenderer({antialias: true});
-      renderer.setSize(w, h); box.append(renderer.domElement);
-      const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+      box.append(renderer.domElement);
+      const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
       camera.position.set(3, 2, 4);
-      scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+      const mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial());
+      scene.add(mesh);
       const controls = new OrbitControls(camera, renderer.domElement);
+      // the view follows the width of the page, which narrows while the comment panel is open
+      new ResizeObserver(() => {
+        renderer.setSize(box.clientWidth, box.clientHeight);
+        camera.aspect = box.clientWidth / box.clientHeight;
+        camera.updateProjectionMatrix();
+      }).observe(box);
+      const scale = document.getElementById('scale');
+      scale.oninput = () => {
+        mesh.scale.setScalar(+scale.value);
+        document.getElementById('scale-v').value = (+scale.value).toFixed(1);
+      };
+      document.getElementById('wire').onchange = e => mesh.material.wireframe = e.target.checked;
       renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
     </script>
+
+Layout: decide it for each page. What matters most (a 3D model, a plot)
+gets the full width: page.css gives class "plot" and class "view" the full
+width of the page and keeps text in a readable column. The page narrows while
+the comment panel is open; Plotly follows it by itself, a three.js view with
+a ResizeObserver as in the example. Put the sliders, choices and switches of
+a plot or a view in a bar above it, <div class="controls">, as a rule; parts
+side by side only when each still has enough room: <div class="pair"> (or a
+"grid") puts two side by side while each gets 560 px, otherwise one above
+the other. A control needs a name only when its value should be handed over
+with Ctrl+Enter. Do not enable damping in OrbitControls: the model must stop
+when the user lets go.
+
+Look at the page before you show it to the author:
+
+       just-doc PAGE.html --shot /tmp/page.png [--size 900x900]
+
+saves a picture of it as it looks live (opening nothing); read the picture
+and fix what is squeezed, cut off or empty. Where no browser can start (a
+container), it says so; then check the layout in the HTML.
 
 To ask the author something on a page, use form fields with a name: radios in
 <fieldset class="choice"> show as pills, a checkbox with class="toggle" as a
@@ -543,6 +585,46 @@ def print_html(doc, text, out):
             raise RuntimeError(f"{Path(exe).name} did not finish printing {doc.name}") from None
     if res.returncode or not out.exists():
         raise RuntimeError(f"{Path(exe).name} could not print {doc.name}:\n{res.stderr.strip()}")
+
+
+def shot(doc, out, size="1500x900"):
+    """Save a picture of the HTML page ``doc`` as it looks live, ``size`` (WIDTHxHEIGHT) pixels, to ``out``.
+
+    The page is served by a just-doc of its own, inside this command, so that
+    /_lib/ works and nothing is opened in the window; a headless browser draws
+    it, with its scripts, and waits until it is still (network idle and timers
+    run, up to eight seconds of page time). WebGL runs in software.
+    """
+    m = re.fullmatch(r"(\d+)[x,](\d+)", size)
+    if not m:
+        raise RuntimeError(f"--size takes WIDTHxHEIGHT, such as 1500x900, not {size!r}")
+    no_browser = "no browser to take a screenshot here; check the layout in the HTML"
+    exe = next((shutil.which(name) for name in BROWSERS if shutil.which(name)), None)
+    if exe is None:
+        fail(no_browser)
+    tabs = Tabs()
+    tabs.open(doc, live=True)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(tabs))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/live/{tabs.focus}/{urllib.parse.quote(doc.name)}"
+    out = Path(out).resolve()
+    out.unlink(missing_ok=True)
+    try:
+        with tempfile.TemporaryDirectory(prefix="just-doc-shot-") as tmp:
+            # an own profile, so a browser window that is open does not take the job over
+            cmd = [exe, "--headless", f"--user-data-dir={tmp}/profile", "--hide-scrollbars", "--use-angle=swiftshader",
+                   "--enable-unsafe-swiftshader", f"--window-size={m[1]},{m[2]}", "--virtual-time-budget=8000",
+                   f"--screenshot={out}", url]
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            except subprocess.TimeoutExpired:
+                fail(no_browser)
+    finally:
+        server.shutdown()
+        server.server_close()
+    if res.returncode or not out.exists() or not out.stat().st_size:
+        fail(no_browser)
+    print(f"{doc.name}: {m[1]}x{m[2]} -> {out}")
 
 
 def kept(doc, what):
@@ -2074,6 +2156,10 @@ def main():
                          "shown here through ssh")
     ap.add_argument("--print", dest="as_print", action="store_true",
                     help="with --hc-terminal: only print where the document is, as JSON (exit status 1: none)")
+    ap.add_argument("--shot", metavar="OUT.png",
+                    help="save a picture of an HTML page as it looks live (with its scripts, /_lib/ served), "
+                         "for an assistant to check the page before showing it; opens no window")
+    ap.add_argument("--size", default="1500x900", metavar="WxH", help="with --shot: the size of the window (default 1500x900)")
     ap.add_argument("--port", type=int, default=0, help=f"port (default: {PORT})")
     ap.add_argument("--no-window", action="store_true", help="start the server only")
     args = ap.parse_args()
@@ -2098,8 +2184,12 @@ def main():
         ap.error("--live shows an HTML file")
     if args.live and args.export:
         ap.error("a live page cannot be exported; leave out --live")
+    if args.shot and doc.suffix.lower() not in HTML:
+        ap.error("--shot takes an HTML file")
     try:
-        if args.export:
+        if args.shot:
+            shot(doc, args.shot, args.size)
+        elif args.export:
             out, count = export(doc)
             print(f"{count} annotation(s) -> {out}")
         elif args.reply or args.done:

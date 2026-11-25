@@ -14,6 +14,7 @@ just-doc page.html --live # an HTML page as it is, scripts running (no comments)
 just-doc                   # list the open documents; open the window again if it was closed
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
+just-doc --hc-terminal t12 # bring the window up with the last document from hc terminal t12
 just-doc --guide           # how a coding assistant reviews a document with you
 ```
 
@@ -533,6 +534,22 @@ and a model that turns with the mouse:
 
 The page has the keyboard: `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
 text field, `H` / `L` still change or close the tab.
+
+## The last document of a terminal
+
+When `just-doc FILE` (with or without `--live`) runs in a shell where
+`HC_TERMINAL_ID` is set, as in an hc or herdr terminal pane (for example
+`t12`), the document is noted with that terminal. Then
+
+```bash
+just-doc --hc-terminal t12
+```
+
+shows the tab of the document that was opened or changed last from that
+terminal and brings the just-doc window to the front (on Hyprland, through
+`hyprctl`; elsewhere only the tab changes). It is meant for a key binding: when
+no running just-doc has a document from that terminal, it prints a short
+message to stderr, exits with status 1 and opens nothing.
 
 ## Third-party code
 

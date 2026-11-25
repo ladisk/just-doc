@@ -22,6 +22,9 @@ Usage
     just-doc book.pdf --reply 2 "text"
                                  add a reply to comment 2
     just-doc book.pdf --done 2   mark comment 2 as done
+    just-doc --hc-terminal t12   bring the window to the front with the document
+                                 that was opened or changed last from the hc
+                                 terminal t12 (HC_TERMINAL_ID of the opening shell)
     just-doc --guide             print how a coding assistant uses the three
                                  commands above to review a document with you
 """
@@ -588,16 +591,21 @@ class Tabs:
         self.stamp = {}      # id -> the time of the last change of the file that the window knows of
         self.logs = {}       # id -> the file of its repository that changes with every commit, and its time
         self.live = set()    # ids of the HTML pages that are shown live, not as a PDF
+        self.terms = {}      # id -> the hc terminal (HC_TERMINAL_ID) the document was opened from
+        self.opened_at = {}  # id -> when the document was opened last (time.time)
         self.quit = False    # set by the q key: the windows close and just-doc stops
         self.changed = threading.Condition()
 
-    def open(self, doc, live=False):
+    def open(self, doc, live=False, terminal=None):
         # a page shown live is another tab than the same page as a PDF
         key = hashlib.sha1((str(doc) + ("\0live" if live else "")).encode()).hexdigest()[:10]
         with self.changed:
             self.docs[key] = doc
             if live:
                 self.live.add(key)
+            if terminal:
+                self.terms[key] = terminal
+            self.opened_at[key] = time.time()
             self.focus = key
             self.opened += 1
             self.version += 1
@@ -611,6 +619,25 @@ class Tabs:
                     self.focus = next(reversed(self.docs), None)
                 self.version += 1
                 self.changed.notify_all()
+
+    def latest(self, terminal):
+        """Return the id of the document from ``terminal`` that was opened or changed last, or None."""
+        def last(key):
+            try:
+                return max(self.opened_at.get(key, 0), self.docs[key].stat().st_mtime)
+            except OSError:
+                return self.opened_at.get(key, 0)
+        with self.changed:
+            keys = [key for key in self.docs if self.terms.get(key) == terminal]
+            return max(keys, key=last, default=None)
+
+    def select(self, key):
+        """Show the tab ``key`` in the window."""
+        with self.changed:
+            self.focus = key
+            self.opened += 1
+            self.version += 1
+            self.changed.notify_all()
 
     def touch(self, key):
         """Tell the window that the comments of a document were changed from outside."""
@@ -823,7 +850,7 @@ def make_handler(tabs):
                     return
                 try:
                     obj = self._body()
-                    new, live = Path(obj["path"]), bool(obj.get("live"))
+                    new, live, terminal = Path(obj["path"]), bool(obj.get("live")), obj.get("terminal")
                     if not new.is_file():
                         raise ValueError(f"not found: {new}")
                     if live and new.suffix.lower() not in HTML:
@@ -834,8 +861,20 @@ def make_handler(tabs):
                     self._json(400, {"error": str(exc)})
                     return
                 windows = tabs.windows
-                tabs.open(new, live)
+                tabs.open(new, live, terminal)
                 self._json(200, {"ok": True, "windows": windows})
+                return
+            if route == "/api/focus":
+                # the tab of the document that a terminal opened or changed last; JSON only, as above
+                if self.headers.get("Content-Type") != "application/json":
+                    self._json(400, {"error": "JSON expected"})
+                    return
+                key = tabs.latest(str(self._body().get("terminal")))
+                if key is None:
+                    self._json(404, {"error": "no document from this terminal"})
+                    return
+                tabs.select(key)
+                self._json(200, {"ok": True, "name": tabs.docs[key].name, "windows": tabs.windows})
                 return
             if route == "/api/quit":
                 # as for /api/open: JSON only, so that another web page cannot stop just-doc
@@ -932,7 +971,7 @@ def open_window(url):
     webbrowser.open(url)
 
 
-def hand_over(url, doc, live=False):
+def hand_over(url, doc, live=False, terminal=None):
     """Open ``doc`` as a tab of the just-doc that runs at ``url``.
 
     Returns the number of windows it has, or None when no just-doc answers there.
@@ -947,7 +986,7 @@ def hand_over(url, doc, live=False):
     if live and state.get("version") != VERSION:
         raise RuntimeError(f"the just-doc at {url} runs an older version that cannot show a page live; stop it "
                            "(q in its window, or Ctrl+C in its terminal) and run this command again")
-    body = {"path": str(doc), "live": live}
+    body = {"path": str(doc), "live": live, "terminal": terminal}
     req = urllib.request.Request(url + "api/open", data=json.dumps(body).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
     try:
@@ -1046,6 +1085,7 @@ def wait(doc, port, window, as_json, limit):
 
 
 def serve(doc, port, window, live=False):
+    terminal = os.environ.get("HC_TERMINAL_ID") or None
     # One just-doc serves all open documents: the first command starts it, and every later
     # command hands its document over to it as a new tab and returns.
     first = port or PORT
@@ -1054,14 +1094,14 @@ def serve(doc, port, window, live=False):
         try:
             server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(tabs := Tabs()))
         except OSError:
-            windows = hand_over(url, doc, live)
+            windows = hand_over(url, doc, live, terminal)
             if windows is None:
                 continue
             print(f"{doc.name}: new tab in the running just-doc, {url}")
             if window and not windows:
                 open_window(url)
             return
-        tabs.open(doc, live)
+        tabs.open(doc, live, terminal)
         print(f"{doc.name}: {url}  ({'live' if live else 'comments -> ' + comments_path(doc).name}, Ctrl+C to stop)")
         if window:
             open_window(url)
@@ -1071,6 +1111,55 @@ def serve(doc, port, window, live=False):
             pass
         return
     sys.exit("no free port found")
+
+
+def raise_window():
+    """Bring the just-doc window to the front on Hyprland; return whether it was found.
+
+    The window is known by its title, which ends in "– just-doc".
+    """
+    if not shutil.which("hyprctl"):
+        return False
+    try:
+        res = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5)
+        found = [c for c in json.loads(res.stdout) if c.get("title", "").endswith("– just-doc")]
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+    if not found:
+        return False
+    # the one that had the focus last
+    address = min(found, key=lambda c: c.get("focusHistoryID", 0))["address"]
+    for cmd in (f'hl.dsp.focus({{ window = "address:{address}" }})',   # Hyprland with a Lua config
+                f"focuswindow address:{address}"):                     # older Hyprland
+        try:
+            res = subprocess.run(["hyprctl", "dispatch", cmd], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if res.returncode == 0 and "error" not in (res.stdout + res.stderr).lower():
+            return True
+    return False
+
+
+def hc_terminal(terminal, port):
+    """Show the document that the hc terminal ``terminal`` opened or changed last, and raise the window.
+
+    Exits with status 1 and a short message when no running just-doc has a document from it.
+    """
+    first = port or PORT
+    for candidate in range(first, first + 20):
+        url = f"http://127.0.0.1:{candidate}/"
+        try:
+            got = ask(url + "api/focus", {"terminal": terminal}, timeout=1)
+        except Exception:  # noqa: BLE001
+            continue
+        if not got["windows"]:
+            open_window(url)
+        else:
+            raise_window()
+        print(f"{got['name']}: {url}")
+        return
+    print(f"just-doc: no open document from terminal {terminal}", file=sys.stderr)
+    sys.exit(1)
 
 
 def show(port, window):
@@ -1247,11 +1336,17 @@ def main():
     ap.add_argument("--export", action="store_true", help="write <name>.commented.pdf with the comments inside")
     ap.add_argument("--live", action="store_true",
                     help="show an HTML file as it is, with its scripts running, instead of as a PDF; no comments")
+    ap.add_argument("--hc-terminal", metavar="ID",
+                    help="bring the window to the front with the document that was opened or changed last "
+                         "from this hc terminal (the HC_TERMINAL_ID of the shell that opened it)")
     ap.add_argument("--port", type=int, default=0, help=f"port (default: {PORT})")
     ap.add_argument("--no-window", action="store_true", help="start the server only")
     args = ap.parse_args()
     if args.guide:
         print(GUIDE, end="")
+        return
+    if args.hc_terminal:
+        hc_terminal(args.hc_terminal, args.port)
         return
     if args.pdf is None:
         if args.reply or args.done or args.wait or args.read or args.export:

@@ -48,3 +48,11 @@ just-doc, one window (a fake browser on the PATH) and every document. It uses
 ports 8967 and 8977 (`RACE_PORT`, and that plus 10).
 
     node tests/race.mjs      # exit code 1 if a check fails
+
+`labels.mjs` checks the hc labels of a terminal with a fake `hc` on the PATH
+that notes its arguments: open gives `live`, `--wait` `waiting`, Ctrl+Enter
+`live` again, closing the tab and `q` remove the label; without `hc` the
+document still opens. It uses port 8968 (`LABELS_PORT`). The other tests put a
+do-nothing `hc` on the PATH.
+
+    node tests/labels.mjs    # exit code 1 if a check fails

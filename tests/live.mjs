@@ -29,6 +29,10 @@ const raw = path => new Promise((resolve, reject) => {
 });
 
 const tmp = mkdtempSync(join(tmpdir(), 'just-doc-live-'));
+// a do-nothing hc on the PATH, so that the hc labels of the test terminals never reach a real hc
+const noHc = join(tmp, 'nohc');
+mkdirSync(noHc);
+writeFileSync(join(noHc, 'hc'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 const procs = [];
 let ws;
 try {
@@ -70,7 +74,7 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   writeFileSync(join(conf, 'just-doc', 'config.json'), JSON.stringify({
     ssh: `python3 ${join(repo, 'tests', 'fake-ssh.py')}`,
     machines: { fake: { target: 'fakehost', 'just-doc': `${venv} --port ${RP}` } } }));
-  const env = term => ({ ...process.env, XDG_CACHE_HOME: join(tmp, 'cache'), XDG_CONFIG_HOME: conf, HC_TERMINAL_ID: term });
+  const env = term => ({ ...process.env, PATH: `${noHc}:${process.env.PATH}`, XDG_CACHE_HOME: join(tmp, 'cache'), XDG_CONFIG_HOME: conf, HC_TERMINAL_ID: term });
   const jd = (...a) => ['run', '--project', repo, 'just-doc', ...a, '--port', String(SP), '--no-window'];
   const run = (term, ...a) => spawnSync('uv', jd(...a), { cwd: repo, env: env(term), encoding: 'utf8' });
   const base = `http://127.0.0.1:${SP}`;

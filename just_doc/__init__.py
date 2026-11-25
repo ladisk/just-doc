@@ -44,6 +44,7 @@ import getpass
 import hashlib
 import json
 import mimetypes
+import queue
 import os
 import re
 import shlex
@@ -809,6 +810,40 @@ class Tabs:
         self.quit = False    # set by the q key: the windows close and just-doc stops
         self.opening = 0     # until when (time.monotonic) a window that this just-doc opened is still starting
         self.changed = threading.Condition()
+        self.labels = {}     # hc terminal -> the just-doc label it was given last ("live", "waiting")
+        self.hc = queue.Queue()  # hc label commands, run in order by one thread, so that opening never waits
+
+    def relabel(self, clear=False):
+        """Label the hc terminals of the open documents with their state, for the hc sidebar.
+
+        ``just-doc=waiting`` while a --wait waits for a document of the terminal, ``just-doc=live``
+        while one is open, and no label once none is (or with ``clear``, when just-doc stops).
+        Call with ``self.changed`` held. Without hc nothing happens.
+        """
+        want = {}
+        if not clear:
+            for key in self.docs:
+                t = self.terms.get(key)
+                if t:
+                    state = "waiting" if self.listens(key) else "live"
+                    want[t] = "waiting" if want.get(t) == "waiting" else state
+        for t in set(self.labels) | set(want):
+            if self.labels.get(t) != want.get(t):
+                self.hc.put((t, want.get(t, "")))
+        self.labels = want
+        if not hasattr(self, "_hc_thread"):
+            self._hc_thread = threading.Thread(target=self._run_hc, daemon=True)
+            self._hc_thread.start()
+
+    def _run_hc(self):
+        while True:
+            t, state = self.hc.get()
+            try:
+                subprocess.run(["hc", "label", t, f"just-doc={state}"], stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            self.hc.task_done()
 
     def open(self, doc, live=False, terminal=None):
         # a page shown live is another tab than the same page as a PDF
@@ -823,6 +858,7 @@ class Tabs:
             self.focus = key
             self.opened += 1
             self.version += 1
+            self.relabel()
             self.changed.notify_all()
 
     def close(self, key):
@@ -833,6 +869,7 @@ class Tabs:
                 if self.focus == key:
                     self.focus = next(reversed(self.docs), None)
                 self.version += 1
+                self.relabel()
                 self.changed.notify_all()
 
     def open_remote(self, info):
@@ -942,6 +979,7 @@ class Tabs:
                 self.version += 1
                 self.changed.notify_all()
             self.waiting[key] = self.waiting.get(key, 0) + 1
+            self.relabel()
             try:
                 while self.handed.get(key, 0) <= self.taken.get(key, 0):
                     left = end - time.monotonic()
@@ -953,6 +991,12 @@ class Tabs:
             finally:
                 self.waiting[key] -= 1
                 self.left[key] = time.monotonic()
+                # a --wait asks again within 3 s (see listens); only after that is the terminal live again
+                threading.Timer(3.2, self._relabel_later).start()
+
+    def _relabel_later(self):
+        with self.changed:
+            self.relabel()
 
     def listens(self, key):
         """Whether a --wait waits for the document; it asks again every 25 s, so a short gap counts too."""
@@ -1380,10 +1424,17 @@ def make_handler(tabs):
                 with tabs.changed:
                     tabs.quit = True
                     tabs.version += 1
+                    tabs.relabel(clear=True)
                     tabs.changed.notify_all()
                 self._json(200, {"ok": True})
                 # a moment later, so that every window still hears of it and closes
-                threading.Timer(0.7, self.server.shutdown).start()
+                # (and once the hc labels are cleared, for at most 3 s more)
+                def stop(server=self.server):
+                    end = time.monotonic() + 3
+                    while tabs.hc.unfinished_tasks and time.monotonic() < end:
+                        time.sleep(0.05)
+                    server.shutdown()
+                threading.Timer(0.7, stop).start()
                 return
             if route == "/api/stop":
                 # a newer just-doc takes over (see restart): stop without closing the windows, which

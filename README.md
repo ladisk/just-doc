@@ -747,6 +747,12 @@ terminal and brings the just-doc window to the front (on Hyprland, through
 no running just-doc has a document from that terminal, it prints a short
 message to stderr, exits with status 1 and opens nothing.
 
+The just-doc server also labels such a terminal for the hc sidebar, with the
+`hc` command when it is on the PATH: `just-doc=live` while a document of the
+terminal is open, `just-doc=waiting` while a `--wait` waits for one, and no
+label once its last document is closed or just-doc stops with `q`. An update
+keeps the labels. Without `hc` nothing happens.
+
 ### Pages of another machine
 
 An agent on another machine (an hc machine reached over ssh) runs

@@ -27,6 +27,10 @@ const check = (name, ok, info = '') => {
 };
 
 const tmp = mkdtempSync(join(tmpdir(), 'just-doc-update-'));
+// a do-nothing hc on the PATH, so that the hc labels of the test terminals never reach a real hc
+const noHc = join(tmp, 'nohc');
+mkdirSync(noHc);
+writeFileSync(join(noHc, 'hc'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 const procs = [];
 let ws;
 try {
@@ -38,7 +42,7 @@ try {
   const pdf = join(site, 'b.pdf');
   spawnSync(py, ['-c', `from pypdf import PdfWriter; w = PdfWriter(); w.add_blank_page(200, 200); w.write(${JSON.stringify(pdf)})`]);
   // no display: no window is opened by just-doc itself
-  const env = (term, build) => ({ ...process.env, XDG_CACHE_HOME: join(tmp, 'cache'), XDG_CONFIG_HOME: join(tmp, 'config'),
+  const env = (term, build) => ({ ...process.env, PATH: `${noHc}:${process.env.PATH}`, XDG_CACHE_HOME: join(tmp, 'cache'), XDG_CONFIG_HOME: join(tmp, 'config'),
     HC_TERMINAL_ID: term, JUST_DOC_BUILD: build || '', WAYLAND_DISPLAY: '', DISPLAY: '' });
   const jd = (port, term, build, ...a) => spawnSync(py, ['-c', 'import just_doc; just_doc.main()', ...a, '--port', String(port), '--no-window'],
     { cwd: repo, env: env(term, build), encoding: 'utf8', timeout: 60000 });

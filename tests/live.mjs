@@ -117,13 +117,33 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   const cmd = (method, params = {}) => new Promise(r => { waiting[++id] = r; ws.send(JSON.stringify({ id, method, params })); });
   await cmd('Runtime.enable'); await cmd('Page.enable');
   await cmd('Page.navigate', { url: base + '/' });
-  const top = async e => (await cmd('Runtime.evaluate', { expression: `(()=>{${e}})()`, returnByValue: true })).result?.value;
+  const top = async e => (await cmd('Runtime.evaluate', { expression: `(()=>{${e}})()`, returnByValue: true, awaitPromise: true })).result?.value;
   // run JS in the frame of the shown tab; w = its window, d = its document
   const ev = e => top(`const f=document.querySelector('iframe.on'); if(!f||!f.contentDocument) return null; const w=f.contentWindow, d=w.document; ${e}`);
 
   const ran = await until(() => ev(`return w.threeOK && !!d.querySelector('#plot .main-svg') && d.getElementById('v')?.textContent`), 20000);
   check('page runs: Plotly plot drawn, three.js and OrbitControls imported, relative script loaded', ran === 'v1', String(ran));
   check('the tab bar shows the live mark', !!(await top(`const t=document.querySelector('.tab.on i'); return t && t.textContent==='live' && t.offsetParent!==null`)));
+
+  // /_lib/three/touchpad.js: touchpad wheel events on an OrbitControls view (no WebGL needed)
+  const pad = await ev(`return (async () => {
+    const T = await import('/_lib/three/three.module.js'), { OrbitControls } = await import('/_lib/three/addons/OrbitControls.js');
+    const { touchpad } = await import('/_lib/three/touchpad.js');
+    const box = d.createElement('div'); box.style.cssText = 'width:600px;height:400px'; d.body.prepend(box);
+    const cam = new T.PerspectiveCamera(45, 1.5, 0.1, 100); cam.position.set(0, 0, 10);
+    const c = new OrbitControls(cam, box); c.update(); touchpad(c);
+    const wheel = o => { const e = new w.WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 300, clientY: 200, deltaMode: 0, ...o }); box.dispatchEvent(e); return e.defaultPrevented; };
+    const dist = () => cam.position.distanceTo(c.target), out = {};
+    out.pan = wheel({ deltaX: 30, deltaY: 20 }) && c.target.x > 0 && c.target.y < 0 && Math.abs(dist() - 10) < 1e-6;
+    const before = dist(); wheel({ deltaY: -50, ctrlKey: true }); out.pinch = dist() < before && dist() > before * 0.5;
+    const d2 = dist(); wheel({ deltaY: 120 }); out.wheel = dist() > d2;
+    const p = cam.position.clone().sub(c.target).normalize(); wheel({ deltaX: 40, deltaY: 0, shiftKey: true });
+    out.shift = p.angleTo(cam.position.clone().sub(c.target).normalize()) > 0.05;
+    box.remove(); return out; })()`);
+  check('touchpad.js: two-finger scroll pans as the page would scroll (target moves, distance kept)', pad?.pan === true, JSON.stringify(pad));
+  check('touchpad.js: pinch zooms in by the pinch amount', pad?.pinch === true, JSON.stringify(pad));
+  check('touchpad.js: a mouse wheel step is left to OrbitControls and zooms', pad?.wheel === true, JSON.stringify(pad));
+  check('touchpad.js: shift + scroll turns the view', pad?.shift === true, JSON.stringify(pad));
 
   // Plotly follows light and dark (plotly-theme.js, served with plotly.min.js); a page's own colours win
   const look = () => ev(`const L=d.getElementById('plot')._fullLayout, M=d.getElementById('plot2')._fullLayout;

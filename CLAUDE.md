@@ -20,8 +20,8 @@ the JSON format, export and the LaTeX source lookup.
   2.0). Do not edit it.
 - `just_doc/web/_lib/` — served at `/_lib/` for pages shown with `--live`:
   copies of Plotly 4.1.2 and three.js r186 (MIT, licences in `licenses/`; only
-  the three.js add-on imports were made relative), and `page.css`, our own small
-  style sheet.
+  the three.js add-on imports were made relative), and our own `page.css`,
+  `plotly-theme.js` and `three/touchpad.js`.
 - `pyproject.toml` — packaging; built with hatchling.
 
 ## Design

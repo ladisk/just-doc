@@ -212,6 +212,9 @@ These are served by just-doc; use them instead of the internet:
                                            (colours in the layout and config.responsive win)
     /_lib/three/three.module.js            three.js r186 as an ES module
     /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
+    /_lib/three/touchpad.js                touchpad(controls): two-finger scroll pans, pinch
+                                           zooms, shift + scroll turns; a mouse wheel zooms;
+                                           use it with every OrbitControls
 
 A plot:
 
@@ -245,6 +248,7 @@ A model that turns with the mouse, with its controls above it:
     <script type="module">
       import * as THREE from '/_lib/three/three.module.js';
       import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
+      import { touchpad } from '/_lib/three/touchpad.js';
       const box = document.getElementById('view');
       const renderer = new THREE.WebGLRenderer({antialias: true});
       box.append(renderer.domElement);
@@ -253,6 +257,8 @@ A model that turns with the mouse, with its controls above it:
       const mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial());
       scene.add(mesh);
       const controls = new OrbitControls(camera, renderer.domElement);
+      // two-finger scroll pans, pinch zooms, shift + scroll turns; a mouse wheel zooms
+      touchpad(controls);
       // the view follows the width of the page, which narrows while the comment panel is open
       new ResizeObserver(() => {
         renderer.setSize(box.clientWidth, box.clientHeight);

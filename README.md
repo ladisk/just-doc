@@ -533,7 +533,57 @@ and a model that turns with the mouse:
 </script>
 ```
 
-The page has the keyboard: `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
+### Answers from a live page
+
+A live page can ask questions with plain form fields; it needs no script.
+Every field with a `name` counts: text fields, text areas, selects, radios and
+checkboxes. A choice keeps its state and can be changed until `Ctrl+Enter`
+hands all fields over, as `Ctrl+Enter` does in a PDF. `page.css` shows radios
+in a `<fieldset class="choice">` as pills and a checkbox with
+`class="toggle"` as a switch:
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Mount</title>
+<link rel="stylesheet" href="/_lib/page.css">
+<h1>Which mount?</h1>
+<fieldset class="choice"><legend>Variant</legend>
+  <label><input type="radio" name="variant" value="A"> A: four bolts</label>
+  <label><input type="radio" name="variant" value="B"> B: clamp</label>
+  <label><input type="radio" name="variant" value="C"> C: glued</label>
+</fieldset>
+<p><label><input type="checkbox" class="toggle" name="damping"> add rubber damping</label></p>
+<p><label>Notes<br><textarea name="notes"></textarea></label></p>
+<p class="muted">Press Ctrl+Enter when you are done.</p>
+```
+
+The answers are written to `page.answers.json` next to the page, one round per
+`Ctrl+Enter`, and
+
+```bash
+just-doc page.html --live --wait   # opens the page if needed, waits for Ctrl+Enter, prints the answers
+just-doc page.html --live --read   # prints the answers of the last Ctrl+Enter (status 1: none yet)
+```
+
+print the last round:
+
+```json
+{
+ "round": 1,
+ "at": "2026-11-25T10:31:07.512Z",
+ "answers": {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
+}
+```
+
+A single checkbox gives true or false, checkboxes that share a name the list of
+the checked values, radios the chosen value (null: none), a select with
+`multiple` a list. A form is not sent anywhere, and buttons count for nothing.
+Without `--live`, `--wait` and `--read` are about the comments of the PDF of
+the same file, as before. On a page of another machine the answers are kept on
+that machine, where its agent runs `--wait`.
+
+The page has the keyboard: `Ctrl+Enter` hands over the answers, and `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
 text field, `H` / `L` still change or close the tab.
 
 ## The last document of a terminal

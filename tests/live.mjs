@@ -1,6 +1,6 @@
 // Test of live pages (--live), /_lib/ and --hc-terminal in headless Chromium. See tests/README.md.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, existsSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -41,7 +41,13 @@ try {
   const page = v => `<!doctype html><meta charset="utf-8"><title>p</title>
 <link rel="stylesheet" href="/_lib/page.css"><link rel="stylesheet" href="sub/style.css">
 <script src="/_lib/plotly.min.js"></script><script src="sub/data.js"></script>
-<h1 id="v">${v}</h1><div id="plot" class="plot"></div><div id="plot2" class="plot"></div><div style="height:3000px"></div>
+<h1 id="v">${v}</h1>
+<fieldset class="choice"><legend>Pick</legend><label><input type="radio" name="pick" value="A"> A</label><label><input type="radio" name="pick" value="B"> B</label></fieldset>
+<label><input type="checkbox" class="toggle" name="ok"> ok</label>
+<label><input type="checkbox" name="tags" value="x">x</label><label><input type="checkbox" name="tags" value="y">y</label>
+<select name="many" multiple><option>m1</option><option>m2</option></select>
+<form><input name="note"><textarea name="long"></textarea></form>
+<div id="plot" class="plot"></div><div id="plot2" class="plot"></div><div style="height:3000px"></div>
 <script>Plotly.newPlot('plot', [{y: window.DATA}]);
 Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {color: '#010203'}});</script>
 <script type="module">
@@ -137,7 +143,35 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   const y = await until(() => ev(`return w.scrollY`), 3000);
   check('scroll position kept', Math.abs(y - 500) < 2, String(y));
 
-  // 6. --hc-terminal: the last document opened or changed from a terminal
+  // 6. answers: the named fields at Ctrl+Enter, for --live --wait and --live --read
+  const waiter = spawn('uv', jd(doc, '--live', '--wait'), { cwd: repo, env: env('t1'), stdio: ['ignore', 'pipe', 'pipe'] });
+  procs.push(waiter);
+  let wout = ''; waiter.stdout.on('data', c => wout += c); waiter.stderr.on('data', c => wout += c);
+  let wexit = null; waiter.on('exit', c => wexit = c);
+  await until(() => wout.includes('waiting for Ctrl+Enter'), 15000);
+  const pill = () => ev(`return w.getComputedStyle(d.querySelector('fieldset.choice label:nth-of-type(2)')).backgroundColor`);
+  const before = await pill();
+  await ev(`d.querySelector('input[name=pick][value=B]').closest('label').click(); d.querySelector('input[name=ok]').click();
+    d.querySelector('input[name=tags][value=y]').click(); d.querySelector('select[name=many]').options[1].selected = true;
+    d.querySelector('input[name=note]').value = 'hi'; d.querySelector('textarea[name=long]').value = 'two\\nlines'; w.marker = 2;
+    d.querySelector('form').requestSubmit(); return 1`);
+  check('a chosen pill looks selected', (await pill()) !== before && await ev(`return d.querySelector('input[name=pick][value=B]').checked`), `${before} -> ${await pill()}`);
+  await sleep(300);
+  check('a form in the page is not sent', (await ev(`return w.marker`)) === 2);
+  await ev(`d.querySelector('textarea[name=long]').dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
+  check('Ctrl+Enter ends --live --wait', (await until(() => wexit !== null, 15000)) && wexit === 0, wout.slice(-300));
+  const want = { pick: 'B', ok: true, tags: ['y'], many: ['m2'], note: 'hi', long: 'two\nlines' };
+  const parsed = t => { try { return JSON.parse(t.slice(t.indexOf('{'))); } catch { return null; } };
+  const got = parsed(wout);
+  check('--live --wait prints the answers', JSON.stringify(got?.answers) === JSON.stringify(want) && got?.round === 1, wout.slice(-300));
+  check('the window says it was handed over', /Handed over 6 answer/.test(await top(`return document.getElementById('toast').textContent`) || ''));
+  const rd = run('t1', doc, '--live', '--read');
+  check('--live --read prints the last answers', rd.status === 0 && JSON.stringify(parsed(rd.stdout)?.answers) === JSON.stringify(want), rd.stdout + rd.stderr);
+  check('answers are kept next to the page', existsSync(join(site, 'page.answers.json')));
+  const rn = run('t1', docB, '--live', '--read');
+  check('--live --read without answers fails cleanly', rn.status === 1 && /no answers yet/.test(rn.stderr), rn.stderr);
+
+  // 7. --hc-terminal: the last document opened or changed from a terminal
   run('t1', docB, '--live');
   run('t2', docC, '--live');
   const ids = Object.fromEntries((await (await fetch(base + '/api/tabs')).json()).tabs.map(t => [t.name, t.id]));
@@ -160,7 +194,7 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('--hc-terminal for an unknown terminal fails cleanly',
     h.status === 1 && /no open document from terminal t99/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr} ${h.stdout}`);
 
-  // 7. --hc-machine: a live page of "another machine", here a second just-doc reached through tests/fake-ssh.py
+  // 8. --hc-machine: a live page of "another machine", here a second just-doc reached through tests/fake-ssh.py
   const rdoc = join(site, 'remote.html');
   writeFileSync(rdoc, page('r1'));
   utimesSync(rdoc, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
@@ -189,6 +223,10 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   writeFileSync(rdoc, page('r2'));
   utimesSync(rdoc, new Date(Date.now() - 5000), new Date(Date.now() - 5000));
   check('remote page loads again when its file changes', !!(await until(() => ev(`return d.getElementById('v')?.textContent === 'r2' && !w.marker`), 20000)));
+  // answers of a remote page are kept on its machine and read there
+  await ev(`d.querySelector('input[name=note]').value = 'from afar'; d.body.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
+  const far = await until(() => { const r = spawnSync(venv, [rdoc, '--live', '--read'], { encoding: 'utf8' }); return r.status === 0 && parsed(r.stdout); }, 8000);
+  check('Ctrl+Enter in a remote page saves its answers there', far?.answers?.note === 'from afar', JSON.stringify(far));
   h = hcm('t77', 'fake');
   check('--hc-machine for an unknown terminal fails cleanly', h.status === 1 && /no open document/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr}`);
   check('no uncaught exceptions', excs.length === 0, excs[0]);

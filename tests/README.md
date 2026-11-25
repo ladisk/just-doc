@@ -14,7 +14,10 @@ folder, its own cache, port 8961 and debugging port 9361 (`SMOKE_PORT`,
 relative files and nothing outside its folder, `/_lib/` serves Plotly, three.js
 and `page.css` with the right content types, the page runs and loads again
 (at the same scroll position) when the file changes, and `--hc-terminal`
-selects the last document of a terminal and fails cleanly for an unknown one.
+selects the last document of a terminal and fails cleanly for an unknown one. It also
+checks that Plotly follows light and dark, and the answers of a page: fields
+filled in, Ctrl+Enter ends `--live --wait`, `--live --read` prints them, also
+for a page of the "other machine".
 For `--hc-machine` it starts a second just-doc on port 8963 as the "other
 machine" and reaches it through `tests/fake-ssh.py` (named in a config file in
 the temp folder), which runs commands and forwards ports on this machine.

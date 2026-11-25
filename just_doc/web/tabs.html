@@ -15,6 +15,9 @@
   kbd { font: 11px ui-monospace, monospace; background: #45484d; color: #e8e8e8; border-radius: 3px; padding: 0 4px; }
   iframe { position: absolute; left: 0; top: 22px; width: 100%; height: calc(100% - 22px); border: 0; visibility: hidden; }
   iframe.on { visibility: visible; }
+  #toast { position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); z-index: 40; background: #1f7a3a; color: #fff;
+           padding: 10px 18px; border-radius: 6px; font-size: 15px; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,.4); display: none; }
+  #toast.err { background: #b00020; }
   /* one document needs no tab bar */
   body.one #tabs { display: none; }
   body.one iframe { top: 0; height: 100%; }
@@ -22,6 +25,7 @@
 </head>
 <body class="one">
 <div id="tabs"></div>
+<div id="toast"></div>
 <script>
 // The window: one tab per open document. Each document is a full viewer in its own frame,
 // so it keeps its page, zoom, cursor and search while another tab is shown.
@@ -92,7 +96,7 @@ function sync(msg) {
     // a page of another machine comes through the server here (t.src, /remote/)
     f.src = t.src || (t.live ? `live/${t.id}/${encodeURIComponent(t.name)}` : 'view?d=' + t.id);
     f.onload = () => {
-      if (t.live) livePage(f);
+      if (t.live) livePage(f, t);
       if (active === t.id) f.contentWindow.focus();
     };
     document.body.appendChild(f);
@@ -132,12 +136,60 @@ function sync(msg) {
   }
 }
 
-// A live page has the keyboard for itself, except for Alt+Left / Alt+Right, Ctrl+w, and H / L
-// outside a text field; those change or close the tab as in a viewer.
-function livePage(f) {
+function toast(msg, err = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = err ? 'err' : '';
+  el.style.display = 'block';
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.style.display = 'none', err ? 8000 : 4000);
+}
+
+// The answers of a live page: every field with a name. A single checkbox is true or false, checkboxes
+// that share a name give the list of the checked values, radios the chosen value (null: none), a
+// select with several choices a list.
+function answers(d) {
+  const out = {}, els = [...d.querySelectorAll('input[name], textarea[name], select[name]')];
+  const boxes = {};
+  for (const el of els) if (el.type === 'checkbox') boxes[el.name] = (boxes[el.name] || 0) + 1;
+  for (const el of els) {
+    const n = el.name;
+    if (['button', 'submit', 'reset', 'image', 'file'].includes(el.type)) continue;
+    if (el.type === 'checkbox') {
+      if (boxes[n] > 1) { out[n] = out[n] || []; if (el.checked) out[n].push(el.value); }
+      else out[n] = el.checked;
+    } else if (el.type === 'radio') {
+      if (!(n in out)) out[n] = null;
+      if (el.checked) out[n] = el.value;
+    } else if (el.tagName === 'SELECT' && el.multiple) out[n] = [...el.selectedOptions].map(o => o.value);
+    else out[n] = el.value;
+  }
+  return out;
+}
+
+// Ctrl+Enter in a live page hands its answers over, as in a viewer; a page of another machine
+// keeps them there, through /remote/
+async function handOver(t, d) {
+  const url = t.remote ? `remote/${t.id}/api/answers?d=${t.rid}` : `api/answers?d=${t.id}`;
+  const got = answers(d), n = Object.keys(got).length;
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: got }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    toast(!j.listening ? 'Handed over, but nobody is waiting yet: start just-doc with --live --wait'
+          : n ? `Handed over ${n} answer(s)` : 'Handed over, but the page has no named fields');
+  } catch (e) { toast('Not handed over: ' + (e.message || 'the server is not responding'), true); }
+}
+
+// A live page has the keyboard for itself, except for Ctrl+Enter (hand over the answers),
+// Alt+Left / Alt+Right, Ctrl+w, and H / L outside a text field; those change or close the tab
+// as in a viewer. A form in it is not sent anywhere.
+function livePage(f, t) {
   const w = f.contentWindow;
   if (f.dataset.scroll) { w.scrollTo(...JSON.parse(f.dataset.scroll)); delete f.dataset.scroll; }
+  w.addEventListener('submit', e => e.preventDefault(), true);
   w.addEventListener('keydown', e => {
+    if (e.ctrlKey && !e.altKey && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handOver(t, w.document); return; }
     const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
     const key = !typing && !e.ctrlKey && !e.altKey && (e.key === 'H' || e.key === 'L') ? (e.key === 'H' ? 'ArrowLeft' : 'ArrowRight')
               : e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') ? e.key

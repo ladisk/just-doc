@@ -213,6 +213,42 @@ A model that turns with the mouse:
       const controls = new OrbitControls(camera, renderer.domElement);
       renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
     </script>
+
+To ask the author something on a page, use form fields with a name: radios in
+<fieldset class="choice"> show as pills, a checkbox with class="toggle" as a
+switch. The author chooses, can change the choice, and presses Ctrl+Enter:
+
+    <!doctype html>
+    <meta charset="utf-8">
+    <title>Mount</title>
+    <link rel="stylesheet" href="/_lib/page.css">
+    <h1>Which mount?</h1>
+    <fieldset class="choice"><legend>Variant</legend>
+      <label><input type="radio" name="variant" value="A"> A: four bolts</label>
+      <label><input type="radio" name="variant" value="B"> B: clamp</label>
+      <label><input type="radio" name="variant" value="C"> C: glued</label>
+    </fieldset>
+    <p><label><input type="checkbox" class="toggle" name="damping"> add rubber damping</label></p>
+    <p><label>Notes<br><textarea name="notes"></textarea></label></p>
+    <p class="muted">Press Ctrl+Enter when you are done.</p>
+
+Then
+
+       just-doc PAGE.html --live --wait
+
+waits for that Ctrl+Enter (opening the page if needed) and prints the answers
+as JSON; just-doc PAGE.html --live --read prints the last ones again:
+
+    {
+     "round": 1,
+     "at": "2026-11-25T10:31:07.512Z",
+     "answers": {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
+    }
+
+A single checkbox gives true or false, checkboxes with the same name a list of
+the checked values, radios the chosen value or null, a select with multiple a
+list. Buttons count for nothing. The rules of --wait above hold here too: keep
+one running while the author works on the page.
 """
 BROWSERS = ("chromium", "brave", "google-chrome-stable", "google-chrome", "chromium-browser")
 
@@ -220,6 +256,39 @@ BROWSERS = ("chromium", "brave", "google-chrome-stable", "google-chrome", "chrom
 def comments_path(doc):
     """Return the path of the comments file that belongs to ``doc``."""
     return doc.with_suffix(".comments.json")
+
+
+def answers_path(doc):
+    """Return the path of the file with the answers of the live page ``doc``."""
+    return doc.with_suffix(".answers.json")
+
+
+def load_answers(doc):
+    try:
+        return json.loads(answers_path(doc).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"source": doc.name, "rounds": []}
+
+
+def save_answers(doc, answers):
+    """Add the fields of the live page ``doc`` at a Ctrl+Enter as a new round; return its number."""
+    with WRITING:
+        data = load_answers(doc)
+        data["source"] = doc.name
+        data["rounds"].append({"round": len(data["rounds"]) + 1, "at": now_stamp(), "answers": answers})
+        tmp = answers_path(doc).with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, answers_path(doc))
+        return len(data["rounds"])
+
+
+def read_answers(doc):
+    """Print the answers of the last Ctrl+Enter in the live page ``doc`` as JSON; exit 1 when there are none."""
+    rounds = load_answers(doc)["rounds"]
+    if not rounds:
+        print(f"no answers yet in {answers_path(doc).name}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(rounds[-1], ensure_ascii=False, indent=1))
 
 
 def load_comments(doc):
@@ -722,7 +791,7 @@ class Tabs:
             if info:
                 # served by the just-doc of that machine, through an ssh forward and /remote/
                 tabs.append({"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
-                             "live": True, "remote": info["machine"], "rev": 0, "file": info.get("file"),
+                             "live": True, "remote": info["machine"], "rid": info["id"], "rev": 0, "file": info.get("file"),
                              "src": f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}",
                              "waiting": False, "pending": False})
                 continue
@@ -961,8 +1030,11 @@ def make_handler(tabs):
             ctype = self.extensions_map.get(file.suffix.lower()) or mimetypes.guess_type(file.name)[0]
             self._send(200, body, ctype or "application/octet-stream")
 
-        def _remote(self):
-            """Pass ``/remote/<id>/<path>`` on to the just-doc of the other machine as ``/<path>``."""
+        def _remote(self, body=None):
+            """Pass ``/remote/<id>/<path>`` on to the just-doc of the other machine as ``/<path>``.
+
+            ``body`` is the body of a POST request, None for GET.
+            """
             url = urllib.parse.urlsplit(self.path)
             _, _, key, rest = (url.path.split("/", 3) + ["", "", "", ""])[:4]
             info = tabs.remote.get(key)
@@ -972,7 +1044,9 @@ def make_handler(tabs):
             try:
                 local = tabs.forwards.port(info["target"], info["port"])
                 there = f"http://127.0.0.1:{local}/{rest}" + (f"?{url.query}" if url.query else "")
-                with urllib.request.urlopen(there, timeout=60) as resp:
+                req = urllib.request.Request(there, data=body, headers={} if body is None else
+                                             {"Content-Type": self.headers.get("Content-Type", "")})
+                with urllib.request.urlopen(req, timeout=60) as resp:
                     code, ctype, body = resp.status, resp.headers.get("Content-Type"), resp.read()
             except urllib.error.HTTPError as exc:
                 code, ctype, body = exc.code, exc.headers.get("Content-Type"), exc.read()
@@ -1049,6 +1123,26 @@ def make_handler(tabs):
 
         def do_POST(self):
             route, key, doc = self._route()
+            if route.startswith("/remote/"):
+                # the answers of a live page of another machine are kept there, where its agent runs
+                self._remote(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+                return
+            if route == "/api/answers":
+                # Ctrl+Enter in a live page: its fields; JSON only, as /api/open
+                try:
+                    if self.headers.get("Content-Type") != "application/json":
+                        raise ValueError("JSON expected")
+                    if key not in tabs.live or doc is None:
+                        raise ValueError("this is not a live page that is open")
+                    answers = self._body()["answers"]
+                    if not isinstance(answers, dict):
+                        raise ValueError("answers must be an object")
+                    number = save_answers(doc, answers)
+                except (OSError, KeyError, ValueError) as exc:
+                    self._json(400, {"error": str(exc)})
+                    return
+                self._json(200, {"ok": True, "round": number, "listening": tabs.hand(key)})
+                return
             if route == "/api/open":
                 # a web page cannot send JSON to another address, so this comes from the just-doc command
                 if self.headers.get("Content-Type") != "application/json":
@@ -1238,8 +1332,8 @@ def ask(url, body=None, timeout=5):
         raise RuntimeError(json.loads(exc.read()).get("error", str(exc))) from exc
 
 
-def running(doc, port):
-    """Find the just-doc that has ``doc`` open.
+def running(doc, port, live=False):
+    """Find the just-doc that has ``doc`` open (``live``: as a live page).
 
     Returns its address, the id of the tab and the number of its windows, or None.
     Says so when that just-doc runs another version of the code than this command.
@@ -1252,7 +1346,7 @@ def running(doc, port):
         except Exception:  # noqa: BLE001
             continue
         for tab in state.get("tabs", []) if state.get("app") == "just-doc" else []:
-            if tab["path"] == str(doc) and not tab.get("live"):
+            if tab["path"] == str(doc) and bool(tab.get("live")) == live:
                 if state.get("version") != VERSION:
                     print(f"note: the just-doc at {url} runs another version than this command and may behave "
                           "differently; stop it (Ctrl+C in its terminal, or kill it) and run this command again")
@@ -1279,20 +1373,24 @@ def reply(doc, replies, done, name, port):
           + ("" if found else " (not open in a window)"))
 
 
-def wait(doc, port, window, as_json, limit):
-    """Open ``doc`` if it is not open, wait for Ctrl+Enter in its window, then print the comments."""
-    found = running(doc, port)
+def wait(doc, port, window, as_json, limit, live=False):
+    """Open ``doc`` if it is not open, wait for Ctrl+Enter in its window, then print the comments.
+
+    For a ``live`` page print the answers instead: its fields at the Ctrl+Enter.
+    """
+    found = running(doc, port, live)
     if found and window and not found[2]:
         open_window(found[0])
     if not found:
         # a just-doc of its own, which stays when this command ends
-        shown_pdf(doc)
-        cmd = [sys.executable, "-c", "import just_doc; just_doc.main()", str(doc)]
+        if not live:
+            shown_pdf(doc)
+        cmd = [sys.executable, "-c", "import just_doc; just_doc.main()", str(doc)] + (["--live"] if live else [])
         cmd += (["--port", str(port)] if port else []) + ([] if window else ["--no-window"])
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         for _ in range(100):
             time.sleep(0.1)
-            found = running(doc, port)
+            found = running(doc, port, live)
             if found:
                 break
         else:
@@ -1312,7 +1410,10 @@ def wait(doc, port, window, as_json, limit):
             raise RuntimeError("the tab was closed") from exc
         except OSError as exc:
             raise RuntimeError("just-doc was stopped") from exc
-    read(doc, as_json, only_open=True)
+    if live:
+        read_answers(doc)
+    else:
+        read(doc, as_json, only_open=True)
 
 
 def serve(doc, port, window, live=False):
@@ -1704,7 +1805,7 @@ def main():
         sys.exit(f"not found: {doc}")
     if args.live and doc.suffix.lower() not in HTML:
         ap.error("--live shows an HTML file")
-    if args.live and (args.reply or args.done or args.wait or args.read or args.export):
+    if args.live and (args.reply or args.done or args.export):
         ap.error("a live page has no comments; leave out --live")
     try:
         if args.export:
@@ -1713,7 +1814,9 @@ def main():
         elif args.reply or args.done:
             reply(doc, args.reply or [], args.done, args.name, args.port)
         elif args.wait:
-            wait(doc, args.port, not args.no_window, args.json, args.timeout)
+            wait(doc, args.port, not args.no_window, args.json, args.timeout, args.live)
+        elif args.read and args.live:
+            read_answers(doc)
         elif args.read:
             read(doc, args.json)
         elif args.live:

@@ -94,3 +94,30 @@ figcaption { color: var(--muted); font-size: 0.9em; margin-top: 0.4em; }
 /* the box of a Plotly plot or a three.js view */
 .plot { width: 100%; height: 480px; }
 .view { width: 100%; height: 70vh; border-radius: var(--radius); overflow: hidden; }
+
+/* fields: answers that Ctrl+Enter hands over (every field with a name) */
+label { cursor: pointer; }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 1.1em; height: 1.1em; margin: 0 0.4em 0 0; vertical-align: -0.15em; }
+input:not([type]), input[type=text], input[type=number], input[type=email], input[type=date], textarea, select {
+  font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
+}
+textarea { width: 100%; min-height: 5em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* a choice of pills: <fieldset class="choice"><legend>Q</legend><label><input type="radio" name="q" value="a"> A</label> ...
+   radios pick one, checkboxes several; the chosen ones are filled */
+fieldset.choice { border: 0; padding: 0; margin: 0 0 1em; display: flex; flex-wrap: wrap; gap: 6px; }
+fieldset.choice legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+fieldset.choice label { display: inline-flex; align-items: center; padding: 5px 14px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--card); user-select: none; }
+fieldset.choice input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+fieldset.choice label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+fieldset.choice label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* a checkbox shown as a switch: <label><input type="checkbox" class="toggle" name="x"> text</label> */
+input.toggle { appearance: none; position: relative; width: 2.4em; height: 1.35em; margin: 0 0.5em 0 0; border-radius: 999px;
+  background: var(--line); vertical-align: -0.35em; cursor: pointer; transition: background 0.15s; }
+input.toggle::before { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.35em - 4px); height: calc(1.35em - 4px);
+  border-radius: 50%; background: #fff; transition: transform 0.15s; }
+input.toggle:checked { background: var(--accent); }
+input.toggle:checked::before { transform: translateX(1.05em); }

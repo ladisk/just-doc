@@ -9,6 +9,8 @@ import sys
 import threading
 
 args = sys.argv[1:]
+if "-O" in args:
+    sys.exit(255)   # no shared connection (ControlMaster)
 rest, forward, i = [], None, 0
 while i < len(args):
     if args[i] in ("-o", "-L"):

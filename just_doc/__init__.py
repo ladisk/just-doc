@@ -778,54 +778,84 @@ class Forwards:
     """Ports of this machine forwarded by ssh to the just-doc of another machine.
 
     A forward is made when it is first needed and closed after ten minutes in
-    which nothing used it. ssh reuses a shared connection (ControlMaster) to the
-    host when one is open; it does not start one.
+    which nothing used it. When a shared connection to the host (ControlMaster)
+    is open, the forward is added to it (``ssh -O forward``) and taken off again
+    (``ssh -O cancel``); otherwise an own ``ssh -N -L`` keeps it.
     """
     IDLE = 600
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.open = {}   # (ssh target, port there) -> [ssh process, port here, when last used]
+        self.open = {}   # (ssh target, port there) -> [ssh process or None (shared), port here, when last used]
+
+    @staticmethod
+    def _reaches(local):
+        try:
+            socket.create_connection(("127.0.0.1", local), timeout=0.5).close()
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _spec(local, remote):
+        return f"127.0.0.1:{local}:127.0.0.1:{remote}"
 
     def port(self, target, remote):
         """Return the local port that leads to port ``remote`` on ``target``."""
         with self.lock:
             fwd = self.open.get((target, remote))
-            if fwd and fwd[0].poll() is None:
+            if fwd and (fwd[0].poll() is None if fwd[0] else self._reaches(fwd[1])):
                 fwd[2] = time.monotonic()
                 return fwd[1]
+            if fwd:
+                self._close(target, remote, fwd)
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))
                 local = sock.getsockname()[1]
-            cmd = ssh_command() + ["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ControlMaster=no", "-o", "BatchMode=yes",
-                                   "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30",
-                                   "-L", f"127.0.0.1:{local}:127.0.0.1:{remote}", "--", target]
-            err = tempfile.TemporaryFile()
-            proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err)
+            spec, proc = self._spec(local, remote), None
+            shared = subprocess.run(ssh_command() + ["-O", "check", "--", target], capture_output=True, timeout=10)
+            if shared.returncode == 0:
+                res = subprocess.run(ssh_command() + ["-O", "forward", "-L", spec, "--", target],
+                                     capture_output=True, text=True, timeout=20)
+                if res.returncode:
+                    raise RuntimeError(f"ssh {target} could not forward a port: {res.stderr.strip()}")
+            else:
+                cmd = ssh_command() + ["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ControlMaster=no",
+                                       "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30",
+                                       "-L", spec, "--", target]
+                err = tempfile.TemporaryFile()
+                proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err)
             end = time.monotonic() + 30
-            while True:
-                if proc.poll() is not None:
+            while not self._reaches(local):
+                if proc and proc.poll() is not None:
                     err.seek(0)
                     raise RuntimeError(f"ssh {target} could not forward a port: "
                                        + err.read().decode("utf-8", "replace").strip())
-                try:
-                    socket.create_connection(("127.0.0.1", local), timeout=0.5).close()
-                    break
-                except OSError:
-                    if time.monotonic() > end:
-                        proc.kill()
-                        raise RuntimeError(f"ssh {target} did not forward a port in 30 s") from None
-                    time.sleep(0.1)
+                if time.monotonic() > end:
+                    self._close(target, remote, [proc, local, 0])
+                    raise RuntimeError(f"ssh {target} did not forward a port in 30 s")
+                time.sleep(0.1)
             self.open[(target, remote)] = [proc, local, time.monotonic()]
             return local
+
+    def _close(self, target, remote, fwd):
+        proc, local, _ = fwd
+        if proc:
+            proc.terminate()
+        else:
+            subprocess.run(ssh_command() + ["-O", "cancel", "-L", self._spec(local, remote), "--", target],
+                           capture_output=True, timeout=10)
+        self.open.pop((target, remote), None)
 
     def reap(self, everything=False):
         """Close the forwards that were not used for ten minutes, or all of them."""
         with self.lock:
-            for key, (proc, _, used) in list(self.open.items()):
-                if everything or proc.poll() is not None or time.monotonic() - used > self.IDLE:
-                    proc.terminate()
-                    del self.open[key]
+            for (target, remote), fwd in list(self.open.items()):
+                if everything or (fwd[0] and fwd[0].poll() is not None) or time.monotonic() - fwd[2] > self.IDLE:
+                    try:
+                        self._close(target, remote, fwd)
+                    except (OSError, subprocess.TimeoutExpired):
+                        self.open.pop((target, remote), None)
 
 
 def watch_remote(tabs):

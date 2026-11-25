@@ -11,6 +11,8 @@ Usage
     just-doc slides.html         the same for an HTML file (needs Chromium,
                                  Brave or Chrome)
     just-doc other.pdf           while a window is open: a new tab in it
+    just-doc page.html --live    show an HTML page as it is, with its scripts
+                                 running, and load it again when it changes
     just-doc book.pdf --read     print the comments (with source lines if
                                  book.synctex.gz is next to the PDF)
     just-doc book.pdf --export   write book.commented.pdf with the comments
@@ -27,6 +29,7 @@ import argparse
 import getpass
 import hashlib
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -528,13 +531,17 @@ class Tabs:
         self.left = {}       # id -> when the last --wait stopped waiting (time.monotonic)
         self.stamp = {}      # id -> the time of the last change of the file that the window knows of
         self.logs = {}       # id -> the file of its repository that changes with every commit, and its time
+        self.live = set()    # ids of the HTML pages that are shown live, not as a PDF
         self.quit = False    # set by the q key: the windows close and just-doc stops
         self.changed = threading.Condition()
 
-    def open(self, doc):
-        key = hashlib.sha1(str(doc).encode()).hexdigest()[:10]
+    def open(self, doc, live=False):
+        # a page shown live is another tab than the same page as a PDF
+        key = hashlib.sha1((str(doc) + ("\0live" if live else "")).encode()).hexdigest()[:10]
         with self.changed:
             self.docs[key] = doc
+            if live:
+                self.live.add(key)
             self.focus = key
             self.opened += 1
             self.version += 1
@@ -543,6 +550,7 @@ class Tabs:
     def close(self, key):
         with self.changed:
             if self.docs.pop(key, None) is not None:
+                self.live.discard(key)
                 if self.focus == key:
                     self.focus = next(reversed(self.docs), None)
                 self.version += 1
@@ -597,8 +605,10 @@ class Tabs:
             # a file that is being written is left alone until it is a second old
             if key not in self.stamp or time.time() - changed > 1:
                 self.stamp[key] = changed
-            self.committed(key, doc)
-            tabs.append({"id": key, "name": doc.name, "path": str(doc), "rev": self.rev.get(key, 0),
+            live = key in self.live
+            if not live:
+                self.committed(key, doc)
+            tabs.append({"id": key, "name": doc.name, "path": str(doc), "live": live, "rev": self.rev.get(key, 0),
                          "file": self.stamp[key], "waiting": self.listens(key),
                          # a Ctrl+Enter that no --wait has taken yet
                          "pending": self.handed.get(key, 0) > self.taken.get(key, 0)})
@@ -620,7 +630,8 @@ class Tabs:
 
 def make_handler(tabs):
     class Handler(SimpleHTTPRequestHandler):
-        extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".mjs": "text/javascript"}
+        extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".mjs": "text/javascript",
+                          ".js": "text/javascript", ".css": "text/css"}
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(WEB), **kwargs)
@@ -675,9 +686,30 @@ def make_handler(tabs):
                 with tabs.changed:
                     tabs.windows -= 1
 
+        def _live(self, route):
+            """Send a file of the folder of a live page: ``/live/<id>/<path in the folder>``.
+
+            Nothing outside that folder is sent, also not through a link.
+            """
+            _, _, key, rel = route.split("/", 3) if route.count("/") >= 3 else ("", "", "", "")
+            doc = tabs.docs.get(key) if key in tabs.live else None
+            try:
+                base = doc.parent.resolve()
+                file = (base / urllib.parse.unquote(rel)).resolve()
+                if file == base or base not in file.parents or not file.is_file():
+                    raise ValueError
+                body = file.read_bytes()
+            except (AttributeError, OSError, ValueError):
+                self._json(404, {"error": "not found"})
+                return
+            ctype = self.extensions_map.get(file.suffix.lower()) or mimetypes.guess_type(file.name)[0]
+            self._send(200, body, ctype or "application/octet-stream")
+
         def do_GET(self):
             route, key, doc = self._route()
-            if route == "/api/events":
+            if route.startswith("/live/"):
+                self._live(route)
+            elif route == "/api/events":
                 self._events()
             elif route == "/api/tabs":
                 self._json(200, {"app": "just-doc", "version": VERSION, "windows": tabs.windows, **tabs.listing()})
@@ -734,15 +766,19 @@ def make_handler(tabs):
                     self._json(400, {"error": "JSON expected"})
                     return
                 try:
-                    new = Path(self._body()["path"])
+                    obj = self._body()
+                    new, live = Path(obj["path"]), bool(obj.get("live"))
                     if not new.is_file():
                         raise ValueError(f"not found: {new}")
-                    shown_pdf(new)
+                    if live and new.suffix.lower() not in HTML:
+                        raise ValueError("only an HTML file can be shown live")
+                    if not live:
+                        shown_pdf(new)
                 except Exception as exc:  # noqa: BLE001
                     self._json(400, {"error": str(exc)})
                     return
                 windows = tabs.windows
-                tabs.open(new)
+                tabs.open(new, live)
                 self._json(200, {"ok": True, "windows": windows})
                 return
             if route == "/api/quit":
@@ -840,18 +876,23 @@ def open_window(url):
     webbrowser.open(url)
 
 
-def hand_over(url, doc):
+def hand_over(url, doc, live=False):
     """Open ``doc`` as a tab of the just-doc that runs at ``url``.
 
     Returns the number of windows it has, or None when no just-doc answers there.
     """
     try:
         with urllib.request.urlopen(url + "api/tabs", timeout=1) as resp:
-            if json.loads(resp.read()).get("app") != "just-doc":
-                return None
+            state = json.loads(resp.read())
+        if state.get("app") != "just-doc":
+            return None
     except Exception:  # noqa: BLE001
         return None
-    req = urllib.request.Request(url + "api/open", data=json.dumps({"path": str(doc)}).encode("utf-8"),
+    if live and state.get("version") != VERSION:
+        raise RuntimeError(f"the just-doc at {url} runs an older version that cannot show a page live; stop it "
+                           "(q in its window, or Ctrl+C in its terminal) and run this command again")
+    body = {"path": str(doc), "live": live}
+    req = urllib.request.Request(url + "api/open", data=json.dumps(body).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -885,7 +926,7 @@ def running(doc, port):
         except Exception:  # noqa: BLE001
             continue
         for tab in state.get("tabs", []) if state.get("app") == "just-doc" else []:
-            if tab["path"] == str(doc):
+            if tab["path"] == str(doc) and not tab.get("live"):
                 if state.get("version") != VERSION:
                     print(f"note: the just-doc at {url} runs another version than this command and may behave "
                           "differently; stop it (Ctrl+C in its terminal, or kill it) and run this command again")
@@ -948,7 +989,7 @@ def wait(doc, port, window, as_json, limit):
     read(doc, as_json, only_open=True)
 
 
-def serve(doc, port, window):
+def serve(doc, port, window, live=False):
     # One just-doc serves all open documents: the first command starts it, and every later
     # command hands its document over to it as a new tab and returns.
     first = port or PORT
@@ -957,15 +998,15 @@ def serve(doc, port, window):
         try:
             server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(tabs := Tabs()))
         except OSError:
-            windows = hand_over(url, doc)
+            windows = hand_over(url, doc, live)
             if windows is None:
                 continue
             print(f"{doc.name}: new tab in the running just-doc, {url}")
             if window and not windows:
                 open_window(url)
             return
-        tabs.open(doc)
-        print(f"{doc.name}: {url}  (comments -> {comments_path(doc).name}, Ctrl+C to stop)")
+        tabs.open(doc, live)
+        print(f"{doc.name}: {url}  ({'live' if live else 'comments -> ' + comments_path(doc).name}, Ctrl+C to stop)")
         if window:
             open_window(url)
         try:
@@ -1148,6 +1189,8 @@ def main():
                     help="mark comment N as done: its highlight fades and leaves at the next Ctrl+Enter; can be given several times")
     ap.add_argument("--from", dest="name", default="reply", metavar="NAME", help="with --reply: the name on the reply")
     ap.add_argument("--export", action="store_true", help="write <name>.commented.pdf with the comments inside")
+    ap.add_argument("--live", action="store_true",
+                    help="show an HTML file as it is, with its scripts running, instead of as a PDF; no comments")
     ap.add_argument("--port", type=int, default=0, help=f"port (default: {PORT})")
     ap.add_argument("--no-window", action="store_true", help="start the server only")
     args = ap.parse_args()
@@ -1162,6 +1205,10 @@ def main():
     doc = args.pdf.resolve()
     if not doc.is_file():
         sys.exit(f"not found: {doc}")
+    if args.live and doc.suffix.lower() not in HTML:
+        ap.error("--live shows an HTML file")
+    if args.live and (args.reply or args.done or args.wait or args.read or args.export):
+        ap.error("a live page has no comments; leave out --live")
     try:
         if args.export:
             out, count = export(doc)
@@ -1172,6 +1219,8 @@ def main():
             wait(doc, args.port, not args.no_window, args.json, args.timeout)
         elif args.read:
             read(doc, args.json)
+        elif args.live:
+            serve(doc, args.port, not args.no_window, live=True)
         else:
             shown_pdf(doc)
             serve(doc, args.port, not args.no_window)

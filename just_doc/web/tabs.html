@@ -9,6 +9,7 @@
   .tab { padding: 0 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
          border-right: 1px solid #45484d; }
   .tab.on { background: #525659; color: #fff; }
+  .tab i { font-style: normal; background: #1f8f4e; color: #fff; border-radius: 8px; padding: 0 6px; margin-right: 6px; font-size: 11px; }
   .tab b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; }
   #keys { margin-left: auto; padding: 0 10px; white-space: nowrap; }
   kbd { font: 11px ui-monospace, monospace; background: #45484d; color: #e8e8e8; border-radius: 3px; padding: 0 4px; }
@@ -55,8 +56,10 @@ function draw() {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
+    // a page shown live, with its scripts running: no comments there
+    if (t.live) { const i = document.createElement('i'); i.textContent = 'live'; el.prepend(i); }
     if (news[t.id]) { const b = document.createElement('b'); b.textContent = (done[t.id] ? '✓ ' : '') + news[t.id]; el.appendChild(b); }
-    el.title = t.path;
+    el.title = t.path + (t.live ? ' (live page, loaded again when the file changes; no comments)' : '');
     el.onclick = () => show(t.id);
     bar.appendChild(el);
   }
@@ -64,7 +67,8 @@ function draw() {
   keys.id = 'keys';
   keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Ctrl</kbd> <kbd>w</kbd> close';
   bar.appendChild(keys);
-  document.body.classList.toggle('one', tabs.length < 2);
+  // the bar also shows for a single live page, so that its marker is seen
+  document.body.classList.toggle('one', tabs.length < 2 && !tabs.some(t => t.live));
   const all = tabs.reduce((sum, t) => sum + (news[t.id] || 0), 0), shown = tabs.find(t => t.id === active);
   const ready = tabs.some(t => done[t.id]);
   if (shown) document.title = (ready ? '✓ ' : '') + (all ? `(${all}) ` : '') + shown.name + ' – just-doc';
@@ -84,8 +88,12 @@ function sync(msg) {
   for (const t of tabs) {
     if (frames[t.id]) continue;
     const f = frames[t.id] = document.createElement('iframe');
-    f.src = 'view?d=' + t.id;
-    f.onload = () => { if (active === t.id) f.contentWindow.focus(); };
+    // a live page comes from its own folder, so that its relative links work
+    f.src = t.live ? `live/${t.id}/${encodeURIComponent(t.name)}` : 'view?d=' + t.id;
+    f.onload = () => {
+      if (t.live) livePage(f);
+      if (active === t.id) f.contentWindow.focus();
+    };
     document.body.appendChild(f);
   }
   // comments that were changed from outside (a reply): the viewer reads them again
@@ -93,8 +101,14 @@ function sync(msg) {
     if (t.id in revs && revs[t.id] !== t.rev) frames[t.id].contentWindow.reloadAnnots?.();
     revs[t.id] = t.rev;
     // the file itself was changed: load the document again
-    if (t.id in files && files[t.id] !== t.file) frames[t.id].contentWindow.location.reload();
+    if (t.id in files && files[t.id] !== t.file) {
+      const w = frames[t.id].contentWindow;
+      // a live page keeps its scroll position
+      if (t.live) frames[t.id].dataset.scroll = JSON.stringify([w.scrollX, w.scrollY]);
+      w.location.reload();
+    }
     files[t.id] = t.file;
+    if (t.live) continue;
     if (waits[t.id] !== t.waiting || pending[t.id] !== t.pending) {
       waits[t.id] = t.waiting;
       pending[t.id] = t.pending;
@@ -115,6 +129,20 @@ function sync(msg) {
     const kept = sessionStorage.getItem('tab');
     show(frames[kept] ? kept : tabs[Math.min(Math.max(at, 0), tabs.length - 1)].id);
   }
+}
+
+// A live page has the keyboard for itself, except for Alt+Left / Alt+Right, Ctrl+w, and H / L
+// outside a text field; those change or close the tab as in a viewer.
+function livePage(f) {
+  const w = f.contentWindow;
+  if (f.dataset.scroll) { w.scrollTo(...JSON.parse(f.dataset.scroll)); delete f.dataset.scroll; }
+  w.addEventListener('keydown', e => {
+    const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
+    const key = !typing && !e.ctrlKey && !e.altKey && (e.key === 'H' || e.key === 'L') ? (e.key === 'H' ? 'ArrowLeft' : 'ArrowRight')
+              : e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') ? e.key
+              : e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'w' ? 'w' : '';
+    if (key && window.tabKey(key)) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 }
 
 // Left / Right change the tab and w closes it; the viewers pass their tab keys on as these.

@@ -10,6 +10,7 @@ just-doc book.pdf --read   # print the comments
 just-doc book.pdf --export # write book.commented.pdf with the comments inside
 just-doc notes.md          # a markdown file works the same way
 just-doc slides.html       # and an HTML file, such as a slide deck
+just-doc page.html --live # an HTML page as it is, scripts running (no comments)
 just-doc                   # list the open documents; open the window again if it was closed
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
@@ -461,6 +462,23 @@ styles are loaded as the page links them, also from the internet.
 
 A change in a linked file (a style sheet, a picture) is not seen; save the HTML
 file again to make the PDF again.
+
+## Live pages
+
+`just-doc page.html --live` shows an HTML page as it is, with its scripts
+running, as a tab of the just-doc window: a Plotly plot zooms, a three.js model
+turns. The tab carries a green `live` mark, and the tab bar shows also when the
+live page is the only tab. A live page has no comments; without `--live` the
+same file is printed to a PDF for commenting as before, and both can be open
+at the same time.
+
+The page is served from its own folder, so its relative links (pictures,
+scripts, data files) work; nothing outside that folder is served. When the
+HTML file changes, the page is loaded again and keeps its scroll position. A
+change in another file of the folder is not seen; save the HTML file again.
+
+The page has the keyboard: `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
+text field, `H` / `L` still change or close the tab.
 
 ## Third-party code
 

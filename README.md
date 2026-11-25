@@ -33,6 +33,23 @@ To try it without installing: `uvx --from git+https://github.com/ladisk/just-doc
 Needs Python 3.9 or newer; the only dependency is `pypdf`, used for the export. The window is a Chromium, Brave or
 Chrome app window if one is installed, otherwise a tab in the default browser.
 
+### After an update
+
+One just-doc serves all open documents, and it keeps running after just-doc
+was updated. The next `just-doc` command that finds it running another version
+(the package version and a hash of its code, so an editable install with new
+commits counts too) restarts it as the new version on the same port, with the
+same tabs, the hc terminals they came from, the pages of other machines and a
+`Ctrl+Enter` that no `--wait` has taken yet. Comments and answers are on disk
+already. The window stays and loads itself again once nothing is being typed
+in it; fields filled in on a live page keep it on the old version until `F5`.
+The window of a just-doc older than this behaviour closes, and a new one opens.
+
+While a `just-doc --wait` waits on it, it is not restarted: the command prints
+one line saying so and is done by the old just-doc, or ends with that line when
+the old one cannot do it. The update follows when the `--wait` ends and no
+other `--wait` starts within a few seconds.
+
 ## Keys
 
 | key | action |

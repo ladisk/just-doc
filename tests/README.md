@@ -31,3 +31,13 @@ It needs Node 22, `uv` and Chromium, uses port 8962 and debugging port 9362
 the PATH, so no real window is raised.
 
     node tests/live.mjs      # exit code 1 if a check fails
+
+`update.mjs` tests the update of a running just-doc of another version
+(`JUST_DOC_BUILD` gives it another build id, and the code of commit `da9d93f`
+stands for one older than the version check): the next command restarts it on
+the same port with its tabs, terminals, comments and a Ctrl+Enter not taken
+yet, and its window loads itself again; with a `--wait` waiting on it, it is
+left alone. It uses ports 8964 to 8966 and debugging port 9364
+(`UPDATE_PORT`, `UPDATE_CDP_PORT`).
+
+    node tests/update.mjs    # exit code 1 if a check fails

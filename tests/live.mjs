@@ -285,9 +285,13 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('remote page loads again when its file changes', !!(await until(() => ev(`return d.getElementById('v')?.textContent === 'r2' && !w.marker`), 20000)));
   // a comment on a remote page is kept on its machine (once the window has read its comments)
   check('the remote page is ready for comments', !!(await until(() => ev(`return !!d.getElementById('__jd_marks')`), 30000)));
-  await select('intro', 4, 9);
-  await press('a');
-  const typed = await typeIn('remote note');
+  // a second try: the keys work once the page has loaded, which is slow through the test's forwarder
+  let typed = false;
+  for (let i = 0; i < 2 && !typed; i++) {
+    await select('intro', 4, 9);
+    await press('a');
+    typed = await typeIn('remote note');
+  }
   const why = await top(`return JSON.stringify([document.getElementById('toast').textContent, document.getElementById('side').innerText.slice(0, 200)])`);
   const rc = await until(() => { const r = spawnSync(venv, [rdoc, '--live', '--read', '--json'], { encoding: 'utf8' });
     return (parsed(r.stdout)?.comments || []).find(a => a.comment === 'remote note'); }, 8000);

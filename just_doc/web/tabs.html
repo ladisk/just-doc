@@ -111,6 +111,11 @@ function sync(msg) {
     document.body.textContent = 'just-doc was stopped; this window can be closed.';
     return;
   }
+  if (msg.build) {
+    // just-doc was updated: it was restarted as a newer version, and the window loads that version too
+    if (build && msg.build !== build) reloadWhenSafe();
+    build = build || msg.build;
+  }
   const at = tabs.findIndex(t => t.id === active);
   tabs = msg.tabs;
   for (const t of tabs) {
@@ -158,6 +163,36 @@ function sync(msg) {
     const kept = sessionStorage.getItem('tab');
     show(frames[kept] ? kept : tabs[Math.min(Math.max(at, 0), tabs.length - 1)].id);
   }
+}
+
+let build = null, outdated = false;
+
+// whether a reload would lose something: text being typed (a comment, a reply, a search), or fields
+// of a live page that were changed (answers not handed over yet)
+function unsaved() {
+  const editing = d => { const a = d?.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); };
+  if (editing(document) || document.getElementById('ed')) return true;
+  for (const t of tabs) {
+    let d;
+    try { d = frames[t.id]?.contentDocument; } catch { continue; }
+    if (!d) continue;
+    if (editing(d)) return true;
+    if (t.live && [...d.querySelectorAll('input, textarea, select')].some(el =>
+        el.type === 'checkbox' || el.type === 'radio' ? el.checked !== el.defaultChecked
+        : el.tagName === 'SELECT' ? [...el.options].some(o => o.selected !== o.defaultSelected)
+        : el.value !== el.defaultValue)) return true;
+  }
+  return false;
+}
+
+function reloadWhenSafe() {
+  if (!unsaved()) { location.reload(); return; }
+  if (!outdated) {
+    outdated = true;
+    toast('just-doc was updated. The window loads the new version when you are done typing; '
+          + 'fields filled in on a live page keep the old one until you press F5');
+  }
+  setTimeout(reloadWhenSafe, 2000);
 }
 
 function toast(msg, err = false) {

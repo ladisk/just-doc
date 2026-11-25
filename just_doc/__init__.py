@@ -60,8 +60,35 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = 8700
-# changes with the code, so a command can tell that the running just-doc is another version
-VERSION = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:8]
+
+
+def build_id():
+    """Return the version of the package and a hash of its code and of the window's files.
+
+    An editable install with new commits gives another id, so a command can tell
+    that the running just-doc is another version than itself. JUST_DOC_BUILD
+    overrides it (for the tests).
+    """
+    if os.environ.get("JUST_DOC_BUILD"):
+        return os.environ["JUST_DOC_BUILD"]
+    try:
+        from importlib.metadata import version
+        package = version("just-doc")
+    except Exception:  # noqa: BLE001
+        package = "0"
+    h = hashlib.sha1()
+    for f in [Path(__file__), *sorted(WEB.glob("*.html")), *sorted(WEB.glob("*.js")),
+              WEB / "_lib" / "page.css", WEB / "_lib" / "plotly-theme.js"]:
+        try:
+            h.update(f.read_bytes())
+        except OSError:
+            pass
+    return f"{package}+{h.hexdigest()[:10]}"
+
+
+VERSION = build_id()
+# what this just-doc can do, for a command that finds an older one it cannot update now (see current)
+FEATURES = ["live", "remote", "live-comments", "session"]
 MARKDOWN = (".md", ".markdown")
 HTML = (".html", ".htm")
 # typst rules for the tables of a markdown file: cell text ragged right, the
@@ -745,6 +772,39 @@ class Tabs:
                 self.version += 1
                 self.changed.notify_all()
 
+    def session(self):
+        """Return what a new just-doc needs to show the same tabs: see restore."""
+        with self.changed:
+            out = []
+            for key, doc in self.docs.items():
+                out.append({"path": str(doc), "live": key in self.live, "terminal": self.terms.get(key),
+                            "opened_at": self.opened_at.get(key), "remote": self.remote.get(key),
+                            "pending": self.handed.get(key, 0) > self.taken.get(key, 0), "focus": key == self.focus})
+            return out
+
+    def restore(self, session):
+        """Open the tabs of ``session`` (from session(), or from the listing of an older just-doc)."""
+        focus = None
+        for e in session:
+            if e.get("remote"):
+                key = self.open_remote(e["remote"])
+            else:
+                self.open(Path(e["path"]), bool(e.get("live")), e.get("terminal"))
+                key = self.focus
+            with self.changed:
+                if e.get("opened_at"):
+                    self.opened_at[key] = e["opened_at"]
+                # a Ctrl+Enter that no --wait has taken yet stays for the next --wait
+                if e.get("pending"):
+                    self.handed[key], self.taken[key] = 1, 0
+            if e.get("focus"):
+                focus = key
+        with self.changed:
+            if focus:
+                self.focus = focus
+            self.version += 1
+            self.changed.notify_all()
+
     def latest(self, terminal):
         """Return the id of the document from ``terminal`` that was opened or changed last, or None."""
         def last(key):
@@ -825,10 +885,11 @@ class Tabs:
             if not live:
                 self.committed(key, doc)
             tabs.append({"id": key, "name": doc.name, "path": str(doc), "live": live, "rev": self.rev.get(key, 0),
-                         "file": self.stamp[key], "waiting": self.listens(key),
+                         "file": self.stamp[key], "waiting": self.listens(key), "waits": self.waiting.get(key, 0),
                          # a Ctrl+Enter that no --wait has taken yet
                          "pending": self.handed.get(key, 0) > self.taken.get(key, 0)})
-        return {"tabs": tabs, "focus": self.focus, "opened": self.opened, "quit": self.quit}
+        # build: the window loads itself again when just-doc was updated (restarted with another version)
+        return {"tabs": tabs, "focus": self.focus, "opened": self.opened, "quit": self.quit, "build": VERSION}
 
     def committed(self, key, doc):
         """Keep the PDF of a document as it is when a commit is made in its repository."""
@@ -1094,7 +1155,10 @@ def make_handler(tabs):
             elif route == "/api/events":
                 self._events()
             elif route == "/api/tabs":
-                self._json(200, {"app": "just-doc", "version": VERSION, "windows": tabs.windows, **tabs.listing()})
+                self._json(200, {"app": "just-doc", "version": VERSION, "features": FEATURES, "windows": tabs.windows,
+                                 **tabs.listing()})
+            elif route == "/api/session":
+                self._json(200, {"version": VERSION, "tabs": tabs.session()})
             elif route in ("/", "/view"):
                 self.path = "/tabs.html" if route == "/" else "/index.html"
                 super().do_GET()
@@ -1226,6 +1290,15 @@ def make_handler(tabs):
                 # a moment later, so that every window still hears of it and closes
                 threading.Timer(0.7, self.server.shutdown).start()
                 return
+            if route == "/api/stop":
+                # a newer just-doc takes over (see restart): stop without closing the windows, which
+                # connect again to the new one and load themselves again; JSON only, as /api/quit
+                if self.headers.get("Content-Type") != "application/json":
+                    self._json(400, {"error": "JSON expected"})
+                    return
+                self._json(200, {"ok": True})
+                threading.Timer(0.2, self.server.shutdown).start()
+                return
             if route == "/api/close":
                 tabs.close(key)
                 self._json(200, {"ok": True})
@@ -1316,6 +1389,147 @@ def open_window(url):
     webbrowser.open(url)
 
 
+def port_free(port):
+    """Whether a just-doc could listen on ``port`` now."""
+    with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def port_owner(port):
+    """Return the process id that listens on the local TCP ``port``, or None (Linux only)."""
+    inodes = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            f = line.split()
+            # state 0A: listening
+            if int(f[1].rsplit(":", 1)[1], 16) == port and f[3] == "0A":
+                inodes.add(f[9])
+    for proc in Path("/proc").glob("[0-9]*"):
+        try:
+            for fd in (proc / "fd").iterdir():
+                if os.readlink(fd) in {f"socket:[{i}]" for i in inodes}:
+                    return int(proc.name)
+        except OSError:
+            continue
+    return None
+
+
+def busy(state):
+    """Whether a --wait waits on the just-doc whose /api/tabs answer is ``state``."""
+    # an older just-doc has only "waiting", which stays true for 3 s after a --wait ended
+    return any(t.get("waits", t.get("waiting")) for t in state.get("tabs", []))
+
+
+def restart(url, state):
+    """Stop the just-doc at ``url`` and start this version in its place, with the same tabs.
+
+    Comments and answers are on disk already; the tabs, the hc terminals they came
+    from and a Ctrl+Enter that no --wait has taken yet are carried over. A window of
+    a just-doc that can be updated this way stays and loads itself again; the window
+    of an older one closes, and a new one opens when there is a display.
+    """
+    port = urllib.parse.urlsplit(url).port
+    newer = "session" in state.get("features", [])
+    if newer:
+        session = ask(url + "api/session", timeout=5)["tabs"]
+    else:
+        # an older just-doc: its listing has the documents, without terminals; its pages of
+        # other machines cannot be opened again from it
+        session = [{"path": t["path"], "live": bool(t.get("live")), "pending": bool(t.get("pending")),
+                    "focus": t["id"] == state.get("focus")} for t in state.get("tabs", []) if not t.get("remote")]
+    fd, saved = tempfile.mkstemp(prefix="just-doc-session-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(session, f)
+    try:
+        ask(url + ("api/stop" if newer else "api/quit"), {}, timeout=5)
+    except Exception:  # noqa: BLE001
+        pass
+    for attempt in range(100):
+        if port_free(port):
+            break
+        if attempt == 50:
+            # it did not stop by itself
+            pid = port_owner(port)
+            if pid:
+                os.kill(pid, signal.SIGTERM)
+        time.sleep(0.1)
+    else:
+        os.unlink(saved)
+        raise RuntimeError(f"the just-doc at {url} runs another version and could not be stopped; stop it and run this again")
+    window = not newer and state.get("windows", 0) > 0
+    cmd = [sys.executable, "-c", f"import just_doc; just_doc.resume({port}, {window}, {saved!r})"]
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(150):
+        time.sleep(0.1)
+        try:
+            if ask(url + "api/tabs", timeout=1).get("version") == VERSION:
+                print(f"just-doc: updated the running just-doc at {url} to this version ({len(session)} tab(s) kept)",
+                      file=sys.stderr)
+                return
+        except Exception:  # noqa: BLE001
+            continue
+    raise RuntimeError(f"the new just-doc at {url} did not start")
+
+
+def resume(port, window, saved):
+    """Serve on ``port`` the tabs saved by restart in the file ``saved``."""
+    session = json.loads(Path(saved).read_text(encoding="utf-8"))
+    Path(saved).unlink(missing_ok=True)
+    serve(None, port, window, session=session, exact=True)
+
+
+def current(url, state, needs=()):
+    """Return the /api/tabs answer ``state`` of the just-doc at ``url``, after updating it to this version.
+
+    A just-doc of another version is restarted as this one (see restart) unless a
+    --wait waits on it; then it stays as it is, with a note, and a request that it
+    cannot do (``needs``, names from FEATURES) ends this command.
+    """
+    if state.get("version") == VERSION:
+        return state
+    if not busy(state):
+        restart(url, state)
+        return ask(url + "api/tabs", timeout=5)
+    message = (f"the just-doc at {url} runs another version; it is updated when the just-doc --wait "
+               "that waits on it ends")
+    missing = [n for n in needs if n not in state.get("features", [])]
+    if missing:
+        fail(f"{message}; until then it cannot do this ({', '.join(missing)})")
+    print(f"just-doc: note: {message}", file=sys.stderr)
+    return state
+
+
+def update_later(url):
+    """After a --wait: update the just-doc at ``url`` in the background once no --wait waits on it."""
+    try:
+        if ask(url + "api/tabs", timeout=2).get("version") == VERSION:
+            return
+    except Exception:  # noqa: BLE001
+        return
+    cmd = [sys.executable, "-c", f"import just_doc; just_doc.update_when_idle({url!r})"]
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def update_when_idle(url):
+    # an older just-doc counts a --wait as waiting for 3 s after it ended
+    time.sleep(4)
+    try:
+        state = ask(url + "api/tabs", timeout=2)
+        if state.get("version") != VERSION and not busy(state):
+            restart(url, state)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def hand_over(url, doc, live=False, terminal=None):
     """Open ``doc`` as a tab of the just-doc that runs at ``url``.
 
@@ -1328,9 +1542,7 @@ def hand_over(url, doc, live=False, terminal=None):
             return None
     except Exception:  # noqa: BLE001
         return None
-    if live and state.get("version") != VERSION:
-        raise RuntimeError(f"the just-doc at {url} runs an older version that cannot show a page live; stop it "
-                           "(q in its window, or Ctrl+C in its terminal) and run this command again")
+    state = current(url, state, ["live"] if live else [])
     body = {"path": str(doc), "live": live, "terminal": terminal}
     req = urllib.request.Request(url + "api/open", data=json.dumps(body).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
@@ -1367,9 +1579,8 @@ def running(doc, port, live=False):
             continue
         for tab in state.get("tabs", []) if state.get("app") == "just-doc" else []:
             if tab["path"] == str(doc) and bool(tab.get("live")) == live:
-                if state.get("version") != VERSION:
-                    print(f"note: the just-doc at {url} runs another version than this command and may behave "
-                          "differently; stop it (Ctrl+C in its terminal, or kill it) and run this command again")
+                state = current(url, state, ["live-comments"] if live else [])
+                # the tab id stays the same in a just-doc that was updated
                 return url, tab["id"], state["windows"]
     return None
 
@@ -1434,14 +1645,21 @@ def wait(doc, port, window, as_json, limit, live=False):
         read_live(doc, as_json, only_open=True)
     else:
         read(doc, as_json, only_open=True)
+    # a just-doc of another version, which could not be updated while this waited
+    update_later(url)
 
 
-def serve(doc, port, window, live=False):
+def serve(doc, port, window, live=False, session=None, exact=False):
+    """Serve ``doc`` (None: no document yet) or hand it over to the just-doc that runs already.
+
+    ``session``: tabs to open, from a just-doc that was updated (see restart);
+    ``exact``: on ``port`` only.
+    """
     terminal = os.environ.get("HC_TERMINAL_ID") or None
     # One just-doc serves all open documents: the first command starts it, and every later
     # command hands its document over to it as a new tab and returns.
     first = port or PORT
-    for candidate in range(first, first + 20):
+    for candidate in range(first, first + (1 if exact else 20)):
         url = f"http://127.0.0.1:{candidate}/"
         try:
             server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(tabs := Tabs()))
@@ -1455,6 +1673,8 @@ def serve(doc, port, window, live=False):
             if window and not windows:
                 open_window(url)
             return
+        if session:
+            tabs.restore(session)
         if doc is None:
             print(f"{url}  (Ctrl+C to stop)")
         else:
@@ -1571,9 +1791,7 @@ def local_just_doc(port):
                 continue
             if state.get("app") != "just-doc":
                 continue
-            if state.get("version") != VERSION:
-                fail(f"the just-doc at {url} runs an older version that cannot show a page of another machine; "
-                     "stop it (q in its window) and run this command again")
+            current(url, state, ["remote"])
             return url
         if attempt == 0:
             cmd = [sys.executable, "-c", f"import just_doc; just_doc.serve(None, {port}, False)"]

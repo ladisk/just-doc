@@ -32,6 +32,7 @@ Usage
                                  commands above to review a document with you
 """
 import argparse
+import functools
 import getpass
 import hashlib
 import json
@@ -172,7 +173,8 @@ These are served by just-doc; use them instead of the internet:
                                            dark, tables, and the classes card, grid, stat,
                                            plot (a 480 px high box) and view (70 % of the
                                            window); body class="wide" uses the full width
-    /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly
+    /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
+                                           dark by themselves (colours set in the layout win)
     /_lib/three/three.module.js            three.js r186 as an ES module
     /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
 
@@ -875,6 +877,13 @@ def watch_remote(tabs):
             tabs.remote_file(key, stamp)
 
 
+@functools.lru_cache(maxsize=1)
+def plotly_bundle():
+    """Return Plotly followed by plotly-theme.js, as /_lib/plotly.min.js serves it; the files stay as they are."""
+    lib = WEB / "_lib"
+    return (lib / "plotly.min.js").read_bytes() + b"\n" + (lib / "plotly-theme.js").read_bytes()
+
+
 def make_handler(tabs):
     class Handler(SimpleHTTPRequestHandler):
         extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".mjs": "text/javascript",
@@ -978,6 +987,8 @@ def make_handler(tabs):
                 self._live(route)
             elif route.startswith("/remote/"):
                 self._remote()
+            elif route == "/_lib/plotly.min.js":
+                self._send(200, plotly_bundle(), "text/javascript")
             elif route == "/api/latest":
                 # for --hc-terminal --print: the document of a terminal, without showing it
                 terminal = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("t", [""])[0]

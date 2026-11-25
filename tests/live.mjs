@@ -41,8 +41,9 @@ try {
   const page = v => `<!doctype html><meta charset="utf-8"><title>p</title>
 <link rel="stylesheet" href="/_lib/page.css"><link rel="stylesheet" href="sub/style.css">
 <script src="/_lib/plotly.min.js"></script><script src="sub/data.js"></script>
-<h1 id="v">${v}</h1><div id="plot" class="plot"></div><div style="height:3000px"></div>
-<script>Plotly.newPlot('plot', [{y: window.DATA}]);</script>
+<h1 id="v">${v}</h1><div id="plot" class="plot"></div><div id="plot2" class="plot"></div><div style="height:3000px"></div>
+<script>Plotly.newPlot('plot', [{y: window.DATA}]);
+Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {color: '#010203'}});</script>
 <script type="module">
   import * as THREE from '/_lib/three/three.module.js';
   import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
@@ -115,6 +116,17 @@ try {
   const ran = await until(() => ev(`return w.threeOK && !!d.querySelector('#plot .main-svg') && d.getElementById('v')?.textContent`), 20000);
   check('page runs: Plotly plot drawn, three.js and OrbitControls imported, relative script loaded', ran === 'v1', String(ran));
   check('the tab bar shows the live mark', !!(await top(`const t=document.querySelector('.tab.on i'); return t && t.textContent==='live' && t.offsetParent!==null`)));
+
+  // Plotly follows light and dark (plotly-theme.js, served with plotly.min.js); a page's own colours win
+  const look = () => ev(`const L=d.getElementById('plot')._fullLayout, M=d.getElementById('plot2')._fullLayout;
+    return [L.paper_bgcolor, L.font.color, M.paper_bgcolor, M.font.color, w.getComputedStyle(d.body).backgroundColor].join(' | ')`);
+  const light = await look();
+  check('light: plot background transparent, dark text', /^rgba\(0,0,0,0\) \| #1f2328 \| #ffeedd \| #010203/.test(light), light);
+  await cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+  const dark = await until(async () => { const v = await look(); return v?.includes('#e6edf3') && v; }, 5000);
+  check('dark: plot redrawn with light text on the dark page, not white', !!dark && /^rgba\(0,0,0,0\) \| #e6edf3 \| #ffeedd \| #010203 \| rgb\(13, 17, 23\)/.test(dark), dark || await look());
+  await cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+  check('light again', !!(await until(async () => (await look())?.includes('#1f2328'), 5000)));
 
   // 5. a change of the file loads the page again, at the same scroll position
   await ev(`w.scrollTo(0, 500); w.marker = 1; return 1`);

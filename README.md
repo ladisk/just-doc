@@ -486,7 +486,8 @@ assistant writes needs neither the internet nor copies of them:
                                        dark, tables, and the classes card, grid, stat,
                                        plot (a 480 px high box) and view (70 % of the
                                        window); body class="wide" uses the full width
-/_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly
+/_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
+                                       dark by themselves (colours set in the layout win)
 /_lib/three/three.module.js            three.js r186 as an ES module
 /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
 ```
@@ -602,4 +603,9 @@ password (a key in the agent).
 and `web/_lib/three/` is [three.js](https://threejs.org) r186 (0.186.1, MIT),
 taken from the npm packages; their licences are in `web/_lib/licenses/`. In
 the three.js add-ons and utils the import from `'three'` is changed to
-`'../three.module.js'`; nothing else is changed.
+`'../three.module.js'`; nothing else is changed. just-doc serves `/_lib/plotly.min.js` with
+`web/_lib/plotly-theme.js` (ours) appended: it gives every plot a default
+template with a transparent background and text and grid colours that suit the
+page (the colours of `page.css` when it is linked), and draws the plots again
+when the system switches between light and dark. Colours in a page's own
+layout, and a template it sets, win.

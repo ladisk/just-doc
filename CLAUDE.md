@@ -14,6 +14,8 @@ the JSON format, export and the LaTeX source lookup.
 - `just_doc/web/tabs.html` — the window: a tab bar and one viewer per open
   document, each in its own frame. One running `just-doc` serves all open
   documents; a later `just-doc file` hands its document over to it as a tab.
+- `just_doc/web/live.js` — comments on live pages, loaded by `tabs.html`: the
+  anchors, the marks drawn over the page and the comment panel of the window.
 - `just_doc/web/pdfjs/` — a bundled copy of PDF.js 4.10.38 (third-party, Apache
   2.0). Do not edit it.
 - `just_doc/web/_lib/` — served at `/_lib/` for pages shown with `--live`:
@@ -55,7 +57,7 @@ uv run just-doc book.pdf --export # write book.commented.pdf
 
 ```bash
 node tests/smoke.mjs              # smoke test in headless Chromium, see tests/README.md
-node tests/live.mjs               # live pages, /_lib/ and --hc-terminal
+node tests/live.mjs               # live pages, their comments, /_lib/ and --hc-terminal
 ```
 
 There are no other automated tests; check changes by running the tool on a PDF.

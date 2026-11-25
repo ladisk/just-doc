@@ -3,7 +3,8 @@
    A plot gets a default template with a transparent background and text and grid colours that
    suit the page background (page.css variables when present). Colours that the page sets in its
    own layout win, and a template the page sets is left alone. When the system switches between
-   light and dark, the plots are drawn again with the new colours. */
+   light and dark, the plots are drawn again with the new colours. Plots are responsive (they follow
+   the width of the page) unless the page sets config.responsive itself. */
 (function () {
   const P = typeof window !== 'undefined' && window.Plotly;
   if (!P || P.__justDocTheme) return;
@@ -46,7 +47,9 @@
         lay = Object.assign({}, lay, { template: Object.assign(template(), { __justDoc: true }) });
         if (el) themed.add(el);
       } else if (el) themed.delete(el);
-      const args = fig ? [gd, Object.assign({}, fig, { layout: lay })] : [gd, data, lay, config];
+      // a plot follows the width of the window (the comment panel narrows the page) unless the page says otherwise
+      const conf = Object.assign({ responsive: true }, fig ? fig.config : config);
+      const args = fig ? [gd, Object.assign({}, fig, { layout: lay, config: conf })] : [gd, data, lay, conf];
       return orig.apply(this, args);
     };
   }

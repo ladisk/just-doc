@@ -10,7 +10,7 @@ just-doc book.pdf --read   # print the comments
 just-doc book.pdf --export # write book.commented.pdf with the comments inside
 just-doc notes.md          # a markdown file works the same way
 just-doc slides.html       # and an HTML file, such as a slide deck
-just-doc page.html --live # an HTML page as it is, scripts running (no comments)
+just-doc page.html --live  # an HTML page as it is, scripts running, to comment and answer
 just-doc                   # list the open documents; open the window again if it was closed
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
@@ -169,7 +169,7 @@ is active, `n` and `N` step through the matches and not through the comments.
 ## Where comments go
 
 `book.pdf` → `book.comments.json`, in the same folder, rewritten after every
-change. Each entry holds the selected `text`, the `comment`, and `rects`: page
+change (a page shown with `--live` has its own, see "Comments on a live page"). Each entry holds the selected `text`, the `comment`, and `rects`: page
 number `p` and position in PDF points measured from the top-left corner.
 An entry with `kind` `strike` is struck-through text that should be deleted,
 `kind` `box` is a rectangle, and `kind` `pin` is a point: its one rectangle has
@@ -469,7 +469,8 @@ file again to make the PDF again.
 `just-doc page.html --live` shows an HTML page as it is, with its scripts
 running, as a tab of the just-doc window: a Plotly plot zooms, a three.js model
 turns. The tab carries a green `live` mark, and the tab bar shows also when the
-live page is the only tab. A live page has no comments; without `--live` the
+live page is the only tab. Its comments are kept apart from those of the
+PDF of the same file (see "Comments on a live page"); without `--live` the
 same file is printed to a PDF for commenting as before, and both can be open
 at the same time.
 
@@ -487,7 +488,8 @@ assistant writes needs neither the internet nor copies of them:
                                        plot (a 480 px high box) and view (70 % of the
                                        window); body class="wide" uses the full width
 /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
-                                       dark by themselves (colours set in the layout win)
+                                       dark and the width of the window by themselves
+                                       (colours in the layout and config.responsive win)
 /_lib/three/three.module.js            three.js r186 as an ES module
 /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
 ```
@@ -562,18 +564,15 @@ The answers are written to `page.answers.json` next to the page, one round per
 `Ctrl+Enter`, and
 
 ```bash
-just-doc page.html --live --wait   # opens the page if needed, waits for Ctrl+Enter, prints the answers
-just-doc page.html --live --read   # prints the answers of the last Ctrl+Enter (status 1: none yet)
+just-doc page.html --live --wait   # opens the page if needed, waits for Ctrl+Enter, prints open comments and answers
+just-doc page.html --live --read   # prints all comments and the answers of the last Ctrl+Enter
 ```
 
-print the last round:
+print the last round after the comments (see "Comments on a live page"):
 
-```json
-{
- "round": 1,
- "at": "2026-11-25T10:31:07.512Z",
- "answers": {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
-}
+```text
+answers (round 1, 2026-11-25T10:31:07.512Z):
+{"variant": "B", "damping": true, "notes": "clamp must not scratch"}
 ```
 
 A single checkbox gives true or false, checkboxes that share a name the list of
@@ -583,8 +582,82 @@ Without `--live`, `--wait` and `--read` are about the comments of the PDF of
 the same file, as before. On a page of another machine the answers are kept on
 that machine, where its agent runs `--wait`.
 
-The page has the keyboard: `Ctrl+Enter` hands over the answers, and `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
-text field, `H` / `L` still change or close the tab.
+### Comments on a live page
+
+A live page is commented as a PDF is, and its plots and models keep working.
+Select text and press `a`, or point at an element with the mouse (a plot, a
+figure, a table) and press `a`. The comments are listed in a panel at the
+right of the window; the page narrows to make room and keeps its own layout.
+On the page they are marked over it: selected text is highlighted, an element
+is outlined, with a dot where the mouse was and its number `#n`.
+
+| key (outside a text field) | action |
+|---|---|
+| `a` | comment on the selected text, or on the element under the mouse; on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply |
+| `Enter` / `Shift` `Enter` / `Esc` | in the comment field: save / new line / cancel |
+| `x` | mark the selected comment done; again opens it |
+| `za` | open or close the row of the selected comment in the list |
+| `n` / `p` | select the next / previous comment and scroll the page to it; a click on a row or a `#n` mark does the same |
+| `d` / `u` | delete the selected comment / undo the delete |
+| `c` | hide or show the comment panel |
+| `Esc` | unselect the comment |
+| `Ctrl` `Enter` | hand the comments and the answers over to the `just-doc --live --wait` that waits |
+
+`Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a text field, `H` / `L`
+still change or close the tab. All other keys belong to the page.
+
+The comments are kept in `page.live.comments.json` next to the page, with the
+fields of the PDF comments where they apply (`n`, `text` for the quote,
+`comment`, `created`, `replies`, `done`, `done_at`, `seen`), and in addition:
+
+```json
+{
+ "kind": "text",
+ "anchor": {"id": "fig-psd", "src": "plots.py:120", "path": "figcaption:nth-of-type(1)",
+            "selector": "body > section:nth-of-type(2) > figure:nth-of-type(1) > figcaption:nth-of-type(1)",
+            "tag": "figcaption", "quote": "peak at 42 Hz", "prefix": "Figure 3: ", "suffix": " is the first",
+            "at": null},
+ "detached": false
+}
+```
+
+`kind` is `text` (selected text) or `element` (the element under the mouse;
+`at` is where the mouse was, as fractions of its width and height). The HTML
+file is never written to: the anchor finds the place again when the page is
+loaded. A comment is placed by `id` (the id, or the `data-src`, of the element
+or of its nearest ancestor that has one; for text the quote is searched inside
+it), then by the quote with the text before and after it, then by the CSS
+`selector`. A comment on an element is put on the nearest element with an id
+or `data-src` around the mouse. A comment that cannot be placed stays in the
+list, marked `detached`, and is never dropped. So give sections, figures and
+plots an `id`, and where it helps `data-src="plots.py:120"` for the code that
+makes them; then a comment stays in place when the page is rewritten, and the
+assistant knows where to change it.
+
+`--live --wait` and `--live --read` print the comments as `--wait` and
+`--read` do for a PDF, with the anchor in place of the page:
+
+```text
+[2] #fig-psd  plots.py:120
+    text:    peak at 42 Hz
+    comment: is this the first mode?
+    selector: body > section:nth-of-type(2) > figure:nth-of-type(1) > figcaption:nth-of-type(1)
+    reply (assistant): yes, the first bending mode
+
+answers (round 1, 2026-11-25T10:31:07.512Z):
+{"damping": true}
+```
+
+With `--json` they print `{"comments": [...], "answers": {"round", "at",
+"answers"} or null}`. `--live --reply N "text"` and `--live --done N` answer
+and close a comment; the panel shows it at once. On a page of another machine
+the comments are kept on that machine, next to the page, where its agent
+reads them.
+
+Limits: a comment is on text or on a whole element, not on a point inside a
+plot's data (the dot shows where the mouse was, and moves with the element, not
+with the data); text inside a canvas or a WebGL view cannot be selected; the
+comment keys work once the page has finished loading.
 
 ## The last document of a terminal
 

@@ -21,11 +21,34 @@
   /* one document needs no tab bar */
   body.one #tabs { display: none; }
   body.one iframe { top: 0; height: 100%; }
+  /* the comments of a live page: a panel at the right, the page narrows to make room */
+  #side { position: fixed; right: 0; top: 22px; bottom: 0; width: 340px; display: none; flex-direction: column;
+          background: #2b2d30; color: #d8dade; border-left: 1px solid #45484d; font-size: 13px; line-height: 1.4; }
+  body.one #side { top: 0; }
+  #list { flex: 1; overflow-y: auto; padding: 6px; }
+  #hint { padding: 6px 8px; border-top: 1px solid #45484d; color: #a9adb3; font-size: 11px; line-height: 20px; }
+  .none { color: #a9adb3; padding: 8px; }
+  .it { background: #35383c; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; cursor: pointer; border-left: 3px solid transparent; }
+  .it.on { border-left-color: #ff9900; background: #3d4045; }
+  .it.done { opacity: .55; }
+  .it .h { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+  .it .wh { color: #a9adb3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px ui-monospace, monospace; }
+  .st { border-radius: 8px; padding: 0 6px; font-size: 11px; color: #fff; }
+  .st.open { background: #c77700; } .st.answered { background: #2f7bff; } .st.done { background: #3c8f55; } .st.detached { background: #b00020; }
+  .it .q { color: #a9adb3; font-style: italic; margin-top: 3px; }
+  .it .c { margin-top: 3px; white-space: pre-wrap; }
+  .it .one { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it .r { margin: 4px 0 0 10px; padding-left: 6px; border-left: 2px solid #2f7bff; white-space: pre-wrap; }
+  .it .r.me { border-left-color: #ff9900; }
+  .it .r i { color: #a9adb3; font-style: normal; font-size: 11px; }
+  #ed { width: 100%; box-sizing: border-box; margin-top: 6px; background: #1e1f22; color: #e8e8e8; border: 1px solid #2f7bff;
+        border-radius: 4px; font: 13px/1.4 system-ui, sans-serif; resize: vertical; }
 </style>
 </head>
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
+<script src="live.js"></script>
 <script>
 // The window: one tab per open document. Each document is a full viewer in its own frame,
 // so it keeps its page, zoom, cursor and search while another tab is shown.
@@ -48,6 +71,7 @@ function show(id) {
   for (const k in frames) frames[k].classList.toggle('on', k === id);
   frames[id].contentWindow.focus();
   draw();
+  LIVE.draw();
 }
 
 // the viewers report their new replies; the sum goes into the title, where the task bar shows it
@@ -60,10 +84,10 @@ function draw() {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
-    // a page shown live, with its scripts running: no comments there
+    // a page shown live, with its scripts running
     if (t.live) { const i = document.createElement('i'); i.textContent = 'live'; el.prepend(i); }
     if (news[t.id]) { const b = document.createElement('b'); b.textContent = (done[t.id] ? '✓ ' : '') + news[t.id]; el.appendChild(b); }
-    el.title = t.path + (t.live ? ' (live page, loaded again when the file changes; no comments)' : '');
+    el.title = t.path + (t.live ? ' (live page, loaded again when the file changes)' : '');
     el.onclick = () => show(t.id);
     bar.appendChild(el);
   }
@@ -103,7 +127,7 @@ function sync(msg) {
   }
   // comments that were changed from outside (a reply): the viewer reads them again
   for (const t of tabs) {
-    if (t.id in revs && revs[t.id] !== t.rev) frames[t.id].contentWindow.reloadAnnots?.();
+    if (t.id in revs && revs[t.id] !== t.rev) t.live ? LIVE.refresh(t.id) : frames[t.id].contentWindow.reloadAnnots?.();
     revs[t.id] = t.rev;
     // the file itself was changed: load the document again
     if (t.id in files && files[t.id] !== t.file) {
@@ -120,7 +144,7 @@ function sync(msg) {
       frames[t.id].contentWindow.showNews?.();
     }
   }
-  for (const id in frames) if (!tabs.some(t => t.id === id)) { frames[id].remove(); delete frames[id]; }
+  for (const id in frames) if (!tabs.some(t => t.id === id)) { frames[id].remove(); delete frames[id]; LIVE.forget(id); }
   if (!tabs.length) { draw(); return; }
   if (msg.opened !== opened) {
     opened = msg.opened;
@@ -167,35 +191,23 @@ function answers(d) {
   return out;
 }
 
-// Ctrl+Enter in a live page hands its answers over, as in a viewer; a page of another machine
-// keeps them there, through /remote/
-async function handOver(t, d) {
-  const url = t.remote ? `remote/${t.id}/api/answers?d=${t.rid}` : `api/answers?d=${t.id}`;
-  const got = answers(d), n = Object.keys(got).length;
-  try {
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: got }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || r.status);
-    toast(!j.listening ? 'Handed over, but nobody is waiting yet: start just-doc with --live --wait'
-          : n ? `Handed over ${n} answer(s)` : 'Handed over, but the page has no named fields');
-  } catch (e) { toast('Not handed over: ' + (e.message || 'the server is not responding'), true); }
-}
-
-// A live page has the keyboard for itself, except for Ctrl+Enter (hand over the answers),
-// Alt+Left / Alt+Right, Ctrl+w, and H / L outside a text field; those change or close the tab
-// as in a viewer. A form in it is not sent anywhere.
+// A live page has the keyboard for itself, except for Ctrl+Enter (hand over the comments and
+// answers), the comment keys outside a text field (live.js), Alt+Left / Alt+Right, Ctrl+w, and
+// H / L outside a text field; those change or close the tab as in a viewer. A form in it is not
+// sent anywhere.
 function livePage(f, t) {
   const w = f.contentWindow;
   if (f.dataset.scroll) { w.scrollTo(...JSON.parse(f.dataset.scroll)); delete f.dataset.scroll; }
   w.addEventListener('submit', e => e.preventDefault(), true);
   w.addEventListener('keydown', e => {
-    if (e.ctrlKey && !e.altKey && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handOver(t, w.document); return; }
+    if (LIVE.key(e, t.id)) { e.preventDefault(); e.stopPropagation(); return; }
     const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
     const key = !typing && !e.ctrlKey && !e.altKey && (e.key === 'H' || e.key === 'L') ? (e.key === 'H' ? 'ArrowLeft' : 'ArrowRight')
               : e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') ? e.key
               : e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'w' ? 'w' : '';
     if (key && window.tabKey(key)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+  LIVE.attach(f, t);
 }
 
 // Left / Right change the tab and w closes it; the viewers pass their tab keys on as these.

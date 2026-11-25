@@ -17,7 +17,12 @@ and `page.css` with the right content types, the page runs and loads again
 selects the last document of a terminal and fails cleanly for an unknown one. It also
 checks that Plotly follows light and dark, and the answers of a page: fields
 filled in, Ctrl+Enter ends `--live --wait`, `--live --read` prints them, also
-for a page of the "other machine".
+for a page of the "other machine". The comments of a live page: `a` on selected
+text and on a plot, the anchors saved next to the page (the HTML file
+untouched), `--live --wait` giving comments and answers, `--live --reply`
+showing in the panel, a changed page keeping a comment on its element by id, a
+removed element giving a detached comment, and a comment and a reply on the
+page of the "other machine".
 For `--hc-machine` it starts a second just-doc on port 8963 as the "other
 machine" and reaches it through `tests/fake-ssh.py` (named in a config file in
 the temp folder), which runs commands and forwards ports on this machine.

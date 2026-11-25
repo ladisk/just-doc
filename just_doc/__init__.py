@@ -12,7 +12,9 @@ Usage
                                  Brave or Chrome)
     just-doc other.pdf           while a window is open: a new tab in it
     just-doc page.html --live    show an HTML page as it is, with its scripts
-                                 running, and load it again when it changes
+                                 running, and load it again when it changes;
+                                 --live with --wait, --read, --reply, --done:
+                                 the comments and answers of that page
     just-doc book.pdf --read     print the comments (with source lines if
                                  book.synctex.gz is next to the PDF)
     just-doc book.pdf --export   write book.commented.pdf with the comments
@@ -166,7 +168,7 @@ run
 It opens as a tab of the just-doc window with its scripts running, and loads
 again by itself whenever you save the file; run the command once. On a
 machine without a display (over ssh) no window opens: the author sees the
-page from their own machine through ssh. A live page has no comments. Files next to the page can be linked by relative paths.
+page from their own machine through ssh. Files next to the page can be linked by relative paths.
 These are served by just-doc; use them instead of the internet:
 
     /_lib/page.css                         a small style sheet: readable width, light and
@@ -174,7 +176,8 @@ These are served by just-doc; use them instead of the internet:
                                            plot (a 480 px high box) and view (70 % of the
                                            window); body class="wide" uses the full width
     /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly; plots follow light and
-                                           dark by themselves (colours set in the layout win)
+                                           dark and the width of the window by themselves
+                                           (colours in the layout and config.responsive win)
     /_lib/three/three.module.js            three.js r186 as an ES module
     /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
 
@@ -237,25 +240,47 @@ Then
        just-doc PAGE.html --live --wait
 
 waits for that Ctrl+Enter (opening the page if needed) and prints the answers
-as JSON; just-doc PAGE.html --live --read prints the last ones again:
-
-    {
-     "round": 1,
-     "at": "2026-11-25T10:31:07.512Z",
-     "answers": {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
-    }
+(see below); just-doc PAGE.html --live --read prints the last ones again.
 
 A single checkbox gives true or false, checkboxes with the same name a list of
 the checked values, radios the chosen value or null, a select with multiple a
-list. Buttons count for nothing. The rules of --wait above hold here too: keep
-one running while the author works on the page.
+list. Buttons count for nothing.
+
+The author can also comment on a live page, as on a PDF: on selected text, or
+on the element under the mouse. Give sections, figures and plots an id, and
+where it helps data-src="FILE:LINE" for the code that makes them; a comment
+is anchored to the nearest element with an id (or data-src), so it stays in
+place when you change the page. Without --json, --wait and --read print the
+open comments, then the answers:
+
+       [2] #fig-psd  plots.py:120
+           element: <the text inside the element, if any>
+           comment: what the author says about it
+
+       answers (round 1, 2026-11-25T10:31:07.512Z):
+       {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
+
+"text:" instead of "element:" is a selected text. A comment marked
+"(detached ...)" is on an element that is no longer in the page. With --json
+the output is {"comments": [...], "answers": {"round", "at", "answers"} or
+null}; each comment has its anchor: id, src (data-src), selector and quote.
+Answer and close comments as in steps 3 and 4, with --live:
+
+       just-doc PAGE.html --live --reply 2 "text" --done 2 --from NAME
+
+The rules of --wait above hold here too: keep one running while the author
+works on the page.
 """
 BROWSERS = ("chromium", "brave", "google-chrome-stable", "google-chrome", "chromium-browser")
 
 
-def comments_path(doc):
-    """Return the path of the comments file that belongs to ``doc``."""
-    return doc.with_suffix(".comments.json")
+def comments_path(doc, live=False):
+    """Return the path of the comments file that belongs to ``doc``; ``live``: to it as a live page.
+
+    The comments of a live page are kept apart from those of its PDF, as they are anchored
+    to elements of the page and not to places on PDF pages.
+    """
+    return doc.with_suffix(".live.comments.json" if live else ".comments.json")
 
 
 def answers_path(doc):
@@ -282,17 +307,8 @@ def save_answers(doc, answers):
         return len(data["rounds"])
 
 
-def read_answers(doc):
-    """Print the answers of the last Ctrl+Enter in the live page ``doc`` as JSON; exit 1 when there are none."""
-    rounds = load_answers(doc)["rounds"]
-    if not rounds:
-        print(f"no answers yet in {answers_path(doc).name}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(rounds[-1], ensure_ascii=False, indent=1))
-
-
-def load_comments(doc):
-    path = comments_path(doc)
+def load_comments(doc, live=False):
+    path = comments_path(doc, live)
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
         numbered(data.setdefault("annots", []))
@@ -312,19 +328,19 @@ def numbered(annots):
         a["n"] = top
 
 
-def save_comments(doc, annots):
+def save_comments(doc, annots, live=False):
     out = {"source": doc.name, "annots": annots}
-    tmp = comments_path(doc).with_suffix(".json.tmp")
+    tmp = comments_path(doc, live).with_suffix(".json.tmp")
     tmp.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, comments_path(doc))
+    os.replace(tmp, comments_path(doc, live))
 
 
-def find_comment(doc, annots, ref):
+def find_comment(doc, annots, ref, live=False):
     """Return the comment ``ref``: its number ``n`` or its id."""
     for a in annots:
         if a.get("id") == ref or (ref.isdigit() and a.get("n") == int(ref)):
             return a
-    raise RuntimeError(f"no comment {ref} in {comments_path(doc).name}")
+    raise RuntimeError(f"no comment {ref} in {comments_path(doc, live).name}")
 
 
 def now_stamp():
@@ -345,18 +361,18 @@ def stamp_key(stamp):
         return (time.gmtime(0), -1)
 
 
-def answer(doc, ref, text, name):
+def answer(doc, ref, text, name, live=False):
     """Add a reply to the comment ``ref``; without a text mark the comment as done."""
     with WRITING:
-        annots = load_comments(doc)["annots"]
-        a = find_comment(doc, annots, ref)
+        annots = load_comments(doc, live)["annots"]
+        a = find_comment(doc, annots, ref, live)
         if text is None:
             a["done"] = True
             a["done_at"] = now_stamp()
         else:
             a.setdefault("replies", []).append(
                 {"from": name, "text": text, "at": now_stamp()})
-        save_comments(doc, annots)
+        save_comments(doc, annots, live)
 
 
 def spoke_at(a):
@@ -364,24 +380,24 @@ def spoke_at(a):
     return max([a.get("created")] + [r.get("at") for r in a.get("replies", []) if not r.get("from")], key=stamp_key)
 
 
-def mark_seen(doc):
+def mark_seen(doc, live=False):
     """Note on each open comment that a --wait shows it to the assistant now."""
     with WRITING:
-        annots = load_comments(doc)["annots"]
+        annots = load_comments(doc, live)["annots"]
         now = now_stamp()
         for a in annots:
             if is_open(a):
                 a.setdefault("seen", []).append(now)
-        save_comments(doc, annots)
+        save_comments(doc, annots, live)
 
 
-def keep_replies(doc, annots):
+def keep_replies(doc, annots, live=False):
     """Put the replies and done marks that are in the file but not in ``annots`` back in.
 
     The window sends the whole list after each change; a reply that was added
     from outside a moment before is not in it yet.
     """
-    old = {a.get("id"): a for a in load_comments(doc)["annots"]}
+    old = {a.get("id"): a for a in load_comments(doc, live)["annots"]}
     for a in annots:
         was = old.get(a.get("id"), {})
         # a window that was opened before the comments had numbers
@@ -717,12 +733,15 @@ class Tabs:
             self.changed.notify_all()
         return key
 
-    def remote_file(self, key, stamp):
-        """Note the file time of a remote page; a new one makes the window load it again."""
+    def remote_file(self, key, stamp, rev):
+        """Note the file time of a remote page and the count of changes of its comments there.
+
+        A new file time makes the window load the page again, a new count its comments.
+        """
         with self.changed:
             info = self.remote.get(key)
-            if info is not None and info.get("file") != stamp:
-                info["file"] = stamp
+            if info is not None and (info.get("file"), info.get("rev", 0)) != (stamp, rev):
+                info["file"], info["rev"] = stamp, rev
                 self.version += 1
                 self.changed.notify_all()
 
@@ -791,7 +810,7 @@ class Tabs:
             if info:
                 # served by the just-doc of that machine, through an ssh forward and /remote/
                 tabs.append({"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
-                             "live": True, "remote": info["machine"], "rid": info["id"], "rev": 0, "file": info.get("file"),
+                             "live": True, "remote": info["machine"], "rid": info["id"], "rev": info.get("rev", 0), "file": info.get("file"),
                              "src": f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}",
                              "waiting": False, "pending": False})
                 continue
@@ -940,10 +959,10 @@ def watch_remote(tabs):
             try:
                 local = tabs.forwards.port(info["target"], info["port"])
                 state = ask(f"http://127.0.0.1:{local}/api/tabs", timeout=3)
-                stamp = next(t["file"] for t in state["tabs"] if t["id"] == info["id"])
+                tab = next(t for t in state["tabs"] if t["id"] == info["id"])
             except Exception:  # noqa: BLE001
                 continue
-            tabs.remote_file(key, stamp)
+            tabs.remote_file(key, tab["file"], tab.get("rev", 0))
 
 
 @functools.lru_cache(maxsize=1)
@@ -1104,14 +1123,14 @@ def make_handler(tabs):
             elif route == "/api/info":
                 self._json(200, {"name": doc.name, "path": str(doc), "file": doc.stat().st_mtime})
             elif route == "/api/annotations":
-                self._json(200, load_comments(doc))
+                self._json(200, load_comments(doc, key in tabs.live))
             elif route == "/api/wait":
                 # answers within half a minute, so the command notices when just-doc is gone
                 seconds = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("s", ["25"])[0]
                 done = tabs.wait(key, min(25.0, float(seconds)))
                 if done:
                     # the comments that the --wait prints now: the window shows them as seen
-                    mark_seen(doc)
+                    mark_seen(doc, key in tabs.live)
                     tabs.touch(key)
                 self._json(200, {"done": done})
             else:
@@ -1227,7 +1246,8 @@ def make_handler(tabs):
                         raise ValueError("JSON expected")
                     obj = self._body()
                     text = obj.get("text")
-                    answer(doc, str(obj["ref"]), None if text is None else str(text), str(obj.get("from", "")))
+                    answer(doc, str(obj["ref"]), None if text is None else str(text), str(obj.get("from", "")),
+                           key in tabs.live)
                 except Exception as exc:  # noqa: BLE001
                     self._json(400, {"error": str(exc)})
                     return
@@ -1263,9 +1283,9 @@ def make_handler(tabs):
                 self._json(400, {"error": str(exc)})
                 return
             with WRITING:
-                keep_replies(doc, obj["annots"])
+                keep_replies(doc, obj["annots"], key in tabs.live)
                 numbered(obj["annots"])
-                save_comments(doc, obj["annots"])
+                save_comments(doc, obj["annots"], key in tabs.live)
             self._json(200, {"ok": True, "n": len(obj["annots"])})
 
         def end_headers(self):
@@ -1354,29 +1374,29 @@ def running(doc, port, live=False):
     return None
 
 
-def reply(doc, replies, done, name, port):
-    """Add replies to comments and mark comments as done.
+def reply(doc, replies, done, name, port, live=False):
+    """Add replies to comments and mark comments as done (``live``: of the live page).
 
     This goes through the running just-doc, so that its window shows them.
     """
-    found = running(doc, port)
-    annots = load_comments(doc)["annots"]
+    found = running(doc, port, live)
+    annots = load_comments(doc, live)["annots"]
     # a number stays with its comment, so it means the one --wait printed
-    changes = [(find_comment(doc, annots, ref).get("id", ref), text) for ref, text in replies]
-    changes += [(find_comment(doc, annots, ref).get("id", ref), None) for ref in done]
+    changes = [(find_comment(doc, annots, ref, live).get("id", ref), text) for ref, text in replies]
+    changes += [(find_comment(doc, annots, ref, live).get("id", ref), None) for ref in done]
     for ref, text in changes:
         if found:
             ask(f"{found[0]}api/reply?d={found[1]}", {"ref": ref, "text": text, "from": name})
         else:
-            answer(doc, ref, text, name)
-    print(f"{len(replies)} reply(ies), {len(done)} done -> {comments_path(doc).name}"
+            answer(doc, ref, text, name, live)
+    print(f"{len(replies)} reply(ies), {len(done)} done -> {comments_path(doc, live).name}"
           + ("" if found else " (not open in a window)"))
 
 
 def wait(doc, port, window, as_json, limit, live=False):
     """Open ``doc`` if it is not open, wait for Ctrl+Enter in its window, then print the comments.
 
-    For a ``live`` page print the answers instead: its fields at the Ctrl+Enter.
+    For a ``live`` page print its open comments and the answers: its fields at the Ctrl+Enter.
     """
     found = running(doc, port, live)
     if found and window and not found[2]:
@@ -1411,7 +1431,7 @@ def wait(doc, port, window, as_json, limit, live=False):
         except OSError as exc:
             raise RuntimeError("just-doc was stopped") from exc
     if live:
-        read_answers(doc)
+        read_live(doc, as_json, only_open=True)
     else:
         read(doc, as_json, only_open=True)
 
@@ -1756,6 +1776,59 @@ def read(doc, as_json, only_open=False):
         print(f"{len(annots)} comment(s) in {comments_path(doc).name}")
 
 
+def anchor_text(a):
+    """Return where a comment of a live page sits: the id, data-src and selector of its element."""
+    anchor = a.get("anchor") or {}
+    parts = [f"#{anchor['id']}" if anchor.get("id") else "", anchor.get("src") or "",
+             "" if anchor.get("id") else anchor.get("selector") or ""]
+    return "  ".join(p for p in parts if p) or "(no anchor)"
+
+
+def read_live(doc, as_json, only_open=False):
+    """Print the comments of the live page ``doc`` and its last answers, as --read does for a PDF.
+
+    With ``only_open`` (for --wait) only the comments that wait for an answer.
+    """
+    annots = load_comments(doc, live=True)["annots"]
+    for a in annots:
+        a["open"] = is_open(a)
+    shown = [a for a in annots if a["open"] or not only_open]
+    rounds = load_answers(doc)["rounds"]
+    last = rounds[-1] if rounds else None
+    if as_json:
+        print(json.dumps({"comments": shown, "answers": last}, ensure_ascii=False, indent=1))
+        return
+    for a in shown:
+        where = anchor_text(a)
+        where += "  (done)" if a.get("done") else "" if a["open"] or only_open else "  (answered)"
+        kind = "element:" if a.get("kind") == "element" else "text:"
+        print(f"[{a['n']}] {where}\n    {kind:<8} {a.get('text') or '(no text inside)'}\n    comment: {a.get('comment') or '(none)'}")
+        anchor = a.get("anchor") or {}
+        if anchor.get("id") and anchor.get("selector"):
+            print(f"    selector: {anchor['selector']}")
+        if a.get("detached"):
+            print("    (detached: the element is no longer found in the page; the comment was made on an older version)")
+        for r in a.get("replies", []):
+            print(f"    reply ({r.get('from') or 'author'}): {r['text']}")
+        seen = a.get("seen", [])
+        if a["open"] and len(seen) > 1 and stamp_key(spoke_at(a)) <= stamp_key(seen[-2]):
+            print("    (shown to you before and not answered)")
+        print()
+    if last:
+        print(f"answers (round {last['round']}, {last['at']}):")
+        print(json.dumps(last["answers"], ensure_ascii=False))
+        print()
+    if only_open:
+        print(f"{len(shown)} open comment(s), {len(annots) - len(shown)} done or answered "
+              f"({doc.name} --live --read shows all)")
+        print(f'Answer:  just-doc {doc.name} --live --reply N "text" [--done N] --from NAME   '
+              f"then  just-doc {doc.name} --live --wait")
+        print("How this works:  just-doc --guide")
+    else:
+        print(f"{len(annots)} comment(s) in {comments_path(doc, True).name}"
+              + ("" if last else f"; no answers yet in {answers_path(doc).name}"))
+
+
 def main():
     ap = argparse.ArgumentParser(prog="just-doc", description="Highlight and comment a PDF, a markdown or an HTML file; comments are saved as JSON.")
     ap.add_argument("pdf", type=Path, metavar="file", nargs="?", help="a PDF, a markdown or an HTML file; without it, the documents that are open are listed")
@@ -1774,7 +1847,7 @@ def main():
     ap.add_argument("--from", dest="name", default="reply", metavar="NAME", help="with --reply: the name on the reply")
     ap.add_argument("--export", action="store_true", help="write <name>.commented.pdf with the comments inside")
     ap.add_argument("--live", action="store_true",
-                    help="show an HTML file as it is, with its scripts running, instead of as a PDF; no comments")
+                    help="show an HTML file as it is, with its scripts running, instead of as a PDF; its comments are kept in <name>.live.comments.json")
     ap.add_argument("--hc-terminal", metavar="ID",
                     help="bring the window to the front with the document that was opened or changed last "
                          "from this hc terminal (the HC_TERMINAL_ID of the shell that opened it)")
@@ -1805,18 +1878,18 @@ def main():
         sys.exit(f"not found: {doc}")
     if args.live and doc.suffix.lower() not in HTML:
         ap.error("--live shows an HTML file")
-    if args.live and (args.reply or args.done or args.export):
-        ap.error("a live page has no comments; leave out --live")
+    if args.live and args.export:
+        ap.error("a live page cannot be exported; leave out --live")
     try:
         if args.export:
             out, count = export(doc)
             print(f"{count} annotation(s) -> {out}")
         elif args.reply or args.done:
-            reply(doc, args.reply or [], args.done, args.name, args.port)
+            reply(doc, args.reply or [], args.done, args.name, args.port, args.live)
         elif args.wait:
             wait(doc, args.port, not args.no_window, args.json, args.timeout, args.live)
         elif args.read and args.live:
-            read_answers(doc)
+            read_live(doc, args.json)
         elif args.read:
             read(doc, args.json)
         elif args.live:

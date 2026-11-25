@@ -41,3 +41,10 @@ left alone. It uses ports 8964 to 8966 and debugging port 9364
 (`UPDATE_PORT`, `UPDATE_CDP_PORT`).
 
     node tests/update.mjs    # exit code 1 if a check fails
+
+`race.mjs` starts three just-doc commands at the same moment, with no just-doc
+running and against one of another version, and checks that there is one
+just-doc, one window (a fake browser on the PATH) and every document. It uses
+ports 8967 and 8977 (`RACE_PORT`, and that plus 10).
+
+    node tests/race.mjs      # exit code 1 if a check fails

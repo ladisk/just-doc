@@ -59,6 +59,7 @@ uv run just-doc book.pdf --export # write book.commented.pdf
 node tests/smoke.mjs              # smoke test in headless Chromium, see tests/README.md
 node tests/live.mjs               # live pages, their comments, /_lib/ and --hc-terminal
 node tests/update.mjs             # a running just-doc of another version is updated
+node tests/race.mjs               # commands at the same moment: one just-doc, one window
 ```
 
 There are no other automated tests; check changes by running the tool on a PDF.

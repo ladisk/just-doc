@@ -37,6 +37,8 @@ Usage
                                  commands above to review a document with you
 """
 import argparse
+import contextlib
+import fcntl
 import functools
 import getpass
 import hashlib
@@ -799,6 +801,7 @@ class Tabs:
         self.remote = {}     # id -> a live page of a just-doc on another machine, see open_remote
         self.forwards = Forwards()
         self.quit = False    # set by the q key: the windows close and just-doc stops
+        self.opening = 0     # until when (time.monotonic) a window that this just-doc opened is still starting
         self.changed = threading.Condition()
 
     def open(self, doc, live=False, terminal=None):
@@ -853,6 +856,10 @@ class Tabs:
                 info["file"], info["rev"] = stamp, rev
                 self.version += 1
                 self.changed.notify_all()
+
+    def shown(self):
+        """The number of windows, counting one that is still starting, so that no command opens a second one."""
+        return self.windows or (1 if time.monotonic() < self.opening else 0)
 
     def session(self):
         """Return what a new just-doc needs to show the same tabs: see restore."""
@@ -1237,7 +1244,7 @@ def make_handler(tabs):
             elif route == "/api/events":
                 self._events()
             elif route == "/api/tabs":
-                self._json(200, {"app": "just-doc", "version": VERSION, "features": FEATURES, "windows": tabs.windows,
+                self._json(200, {"app": "just-doc", "version": VERSION, "features": FEATURES, "windows": tabs.shown(),
                                  **tabs.listing()})
             elif route == "/api/session":
                 self._json(200, {"version": VERSION, "tabs": tabs.session()})
@@ -1325,7 +1332,7 @@ def make_handler(tabs):
                 except Exception as exc:  # noqa: BLE001
                     self._json(400, {"error": str(exc)})
                     return
-                windows = tabs.windows
+                windows = tabs.shown()
                 tabs.open(new, live, terminal)
                 self._json(200, {"ok": True, "windows": windows})
                 return
@@ -1339,7 +1346,7 @@ def make_handler(tabs):
                     self._json(404, {"error": "no document from this terminal"})
                     return
                 tabs.select(key)
-                self._json(200, {"ok": True, "name": tabs.docs[key].name, "windows": tabs.windows})
+                self._json(200, {"ok": True, "name": tabs.docs[key].name, "windows": tabs.shown()})
                 return
             if route == "/api/remote":
                 # a live page of another machine, from --hc-machine; JSON only, as above
@@ -1355,7 +1362,7 @@ def make_handler(tabs):
                 except (KeyError, TypeError, ValueError, OSError, RuntimeError) as exc:
                     self._json(502, {"error": str(exc)})
                     return
-                windows = tabs.windows
+                windows = tabs.shown()
                 tabs.open_remote(info)
                 self._json(200, {"ok": True, "windows": windows})
                 return
@@ -1471,6 +1478,35 @@ def open_window(url):
     webbrowser.open(url)
 
 
+_held = threading.local()
+
+
+@contextlib.contextmanager
+def server_lock(port):
+    """Hold the lock of starting, finding and updating the just-doc of ``port`` (Linux, macOS).
+
+    Two commands at the same moment would otherwise both start a just-doc, or
+    both restart one; the second waits here and then finds the first one's.
+    The same process may take it again (a restart inside a hand-over).
+    """
+    depth = getattr(_held, "depth", 0)
+    if depth:
+        _held.depth = depth + 1
+        try:
+            yield
+        finally:
+            _held.depth -= 1
+        return
+    with open(cache_dir() / f"server-{port or PORT}.lock", "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        _held.depth = 1
+        try:
+            yield
+        finally:
+            _held.depth = 0
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
 def port_free(port):
     """Whether a just-doc could listen on ``port`` now."""
     with socket.socket() as sock:
@@ -1548,7 +1584,9 @@ def restart(url, state):
         os.unlink(saved)
         raise RuntimeError(f"the just-doc at {url} runs another version and could not be stopped; stop it and run this again")
     window = not newer and state.get("windows", 0) > 0
-    cmd = [sys.executable, "-c", f"import just_doc; just_doc.resume({port}, {window}, {saved!r})"]
+    # the windows of a newer one connect again by themselves, in a few seconds
+    expect = newer and state.get("windows", 0) > 0
+    cmd = [sys.executable, "-c", f"import just_doc; just_doc.resume({port}, {window}, {saved!r}, {expect})"]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     for _ in range(150):
         time.sleep(0.1)
@@ -1562,11 +1600,11 @@ def restart(url, state):
     raise RuntimeError(f"the new just-doc at {url} did not start")
 
 
-def resume(port, window, saved):
+def resume(port, window, saved, expect=False):
     """Serve on ``port`` the tabs saved by restart in the file ``saved``."""
     session = json.loads(Path(saved).read_text(encoding="utf-8"))
     Path(saved).unlink(missing_ok=True)
-    serve(None, port, window, session=session, exact=True)
+    serve(None, port, window, session=session, exact=True, locked=True, expect=expect)
 
 
 def current(url, state, needs=()):
@@ -1578,9 +1616,14 @@ def current(url, state, needs=()):
     """
     if state.get("version") == VERSION:
         return state
-    if not busy(state):
-        restart(url, state)
-        return ask(url + "api/tabs", timeout=5)
+    with server_lock(urllib.parse.urlsplit(url).port):
+        # another command may have updated it while this one waited for the lock
+        state = ask(url + "api/tabs", timeout=5)
+        if state.get("version") == VERSION:
+            return state
+        if not busy(state):
+            restart(url, state)
+            return ask(url + "api/tabs", timeout=5)
     message = (f"the just-doc at {url} runs another version; it is updated when the just-doc --wait "
                "that waits on it ends")
     missing = [n for n in needs if n not in state.get("features", [])]
@@ -1607,7 +1650,7 @@ def update_when_idle(url):
     try:
         state = ask(url + "api/tabs", timeout=2)
         if state.get("version") != VERSION and not busy(state):
-            restart(url, state)
+            current(url, state)
     except Exception:  # noqa: BLE001
         pass
 
@@ -1731,12 +1774,30 @@ def wait(doc, port, window, as_json, limit, live=False):
     update_later(url)
 
 
-def serve(doc, port, window, live=False, session=None, exact=False):
+def serve(doc, port, window, live=False, session=None, exact=False, locked=False, expect=False):
     """Serve ``doc`` (None: no document yet) or hand it over to the just-doc that runs already.
 
     ``session``: tabs to open, from a just-doc that was updated (see restart);
-    ``exact``: on ``port`` only.
+    ``exact``: on ``port`` only; ``locked``: the command that started this one
+    holds the lock of the port (see restart).
     """
+    with contextlib.nullcontext() if locked else server_lock(port):
+        server, tabs, url = _start(doc, port, window, live, session, exact, expect)
+    if server is None:
+        return
+    threading.Thread(target=watch_remote, args=(tabs,), daemon=True).start()
+    # a kill ends it as Ctrl+C does, so that its ssh forwards are closed too
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        tabs.forwards.reap(everything=True)
+
+
+def _start(doc, port, window, live, session, exact, expect=False):
+    """Listen on a free port with the tabs of serve, or hand ``doc`` over; return (server, tabs, url) or Nones."""
     terminal = os.environ.get("HC_TERMINAL_ID") or None
     # One just-doc serves all open documents: the first command starts it, and every later
     # command hands its document over to it as a new tab and returns.
@@ -1747,6 +1808,12 @@ def serve(doc, port, window, live=False, session=None, exact=False):
             server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(tabs := Tabs()))
         except OSError:
             if doc is None:
+                # a just-doc runs there already (one started at the same moment): nothing more to do
+                try:
+                    if ask(url + "api/tabs", timeout=2).get("app") == "just-doc":
+                        return None, None, url
+                except Exception:  # noqa: BLE001
+                    pass
                 continue
             windows = hand_over(url, doc, live, terminal)
             if windows is None:
@@ -1754,7 +1821,7 @@ def serve(doc, port, window, live=False, session=None, exact=False):
             print(f"{doc.name}: new tab in the running just-doc, {url}")
             if window and not windows:
                 open_window(url)
-            return
+            return None, None, url
         if session:
             tabs.restore(session)
         if doc is None:
@@ -1762,18 +1829,12 @@ def serve(doc, port, window, live=False, session=None, exact=False):
         else:
             tabs.open(doc, live, terminal)
             print(f"{doc.name}: {url}  ({'live' if live else 'comments -> ' + comments_path(doc).name}, Ctrl+C to stop)")
-        threading.Thread(target=watch_remote, args=(tabs,), daemon=True).start()
-        # a kill ends it as Ctrl+C does, so that its ssh forwards are closed too
-        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-        if window:
+        if (window and has_display()) or expect:
+            # a command right after this one counts the window as open while it starts (or connects again)
+            tabs.opening = time.monotonic() + 20
+        if window and has_display():
             open_window(url)
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            tabs.forwards.reap(everything=True)
-        return
+        return server, tabs, url
     sys.exit("no free port found")
 
 

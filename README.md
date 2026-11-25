@@ -45,6 +45,8 @@ same tabs, the hc terminals they came from, the pages of other machines and a
 already. The window stays and loads itself again once nothing is being typed
 in it; fields filled in on a live page keep it on the old version until `F5`.
 The window of a just-doc older than this behaviour closes, and a new one opens.
+Commands started at the same moment take turns (a lock file in the cache
+folder), so they start, or update, one just-doc with one window between them.
 
 While a `just-doc --wait` waits on it, it is not restarted: the command prints
 one line saying so and is done by the old just-doc, or ends with that line when

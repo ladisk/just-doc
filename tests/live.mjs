@@ -55,7 +55,13 @@ try {
   // older times, so that a change later is seen at once
   for (const f of [doc, docB, docC]) utimesSync(f, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
 
-  const env = term => ({ ...process.env, XDG_CACHE_HOME: join(tmp, 'cache'), HC_TERMINAL_ID: term });
+  // the "other machine" of --hc-machine is a second just-doc here, on port SP + 1, reached through tests/fake-ssh.py
+  const RP = SP + 1, venv = join(repo, '.venv', 'bin', 'just-doc'), conf = join(tmp, 'config');
+  mkdirSync(join(conf, 'just-doc'), { recursive: true });
+  writeFileSync(join(conf, 'just-doc', 'config.json'), JSON.stringify({
+    ssh: `python3 ${join(repo, 'tests', 'fake-ssh.py')}`,
+    machines: { fake: { target: 'fakehost', 'just-doc': `${venv} --port ${RP}` } } }));
+  const env = term => ({ ...process.env, XDG_CACHE_HOME: join(tmp, 'cache'), XDG_CONFIG_HOME: conf, HC_TERMINAL_ID: term });
   const jd = (...a) => ['run', '--project', repo, 'just-doc', ...a, '--port', String(SP), '--no-window'];
   const run = (term, ...a) => spawnSync('uv', jd(...a), { cwd: repo, env: env(term), encoding: 'utf8' });
   const base = `http://127.0.0.1:${SP}`;
@@ -125,7 +131,6 @@ try {
   const ids = Object.fromEntries((await (await fetch(base + '/api/tabs')).json()).tabs.map(t => [t.name, t.id]));
   check('three live tabs', Object.keys(ids).length === 3, JSON.stringify(ids));
   // no hyprctl on the PATH, so no real window is raised
-  const venv = join(repo, '.venv', 'bin', 'just-doc');
   const hc = term => spawnSync(venv, ['--hc-terminal', term, '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });
   const focus = async () => (await (await fetch(base + '/api/tabs')).json()).focus;
@@ -142,6 +147,38 @@ try {
   h = hc('t99');
   check('--hc-terminal for an unknown terminal fails cleanly',
     h.status === 1 && /no open document from terminal t99/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr} ${h.stdout}`);
+
+  // 7. --hc-machine: a live page of "another machine", here a second just-doc reached through tests/fake-ssh.py
+  const rdoc = join(site, 'remote.html');
+  writeFileSync(rdoc, page('r1'));
+  utimesSync(rdoc, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
+  procs.push(spawn(venv, [rdoc, '--live', '--no-window', '--port', String(RP)],
+    { env: { ...env('t5'), WAYLAND_DISPLAY: '', DISPLAY: '' }, stdio: 'ignore' }));
+  await until(async () => (await fetch(`http://127.0.0.1:${RP}/api/tabs`)).ok, 15000);
+  const pr = spawnSync(venv, ['--hc-terminal', 't5', '--print', '--port', String(RP)], { encoding: 'utf8' });
+  const printed = (() => { try { return JSON.parse(pr.stdout); } catch { return null; } })();
+  check('--print gives the port and address of the page', pr.status === 0 && printed?.port === RP && printed?.live
+    && printed?.url === `/live/${printed?.id}/remote.html`, pr.stdout + pr.stderr);
+  const none = spawnSync(venv, ['--hc-terminal', 't77', '--print', '--port', String(RP)], { encoding: 'utf8' });
+  check('--print for an unknown terminal fails cleanly', none.status === 1 && !none.stdout, none.stdout + none.stderr);
+  const hcm = (term, machine) => spawnSync(venv, ['--hc-terminal', term, '--hc-machine', machine, '--port', String(SP)],
+    { env: { HOME: process.env.HOME, PATH: '/usr/bin:/bin', XDG_CONFIG_HOME: conf, XDG_CACHE_HOME: join(tmp, 'cache') },
+      encoding: 'utf8', timeout: 60000 });
+  h = hcm('t5', 'fake');
+  check('--hc-machine succeeds', h.status === 0, h.stderr || h.stdout);
+  const rt = (await (await fetch(base + '/api/tabs')).json());
+  const rtab = rt.tabs.find(t => t.remote === 'fake');
+  check('a remote tab, named with its machine, is shown', !!rtab && rtab.name === 'fake: remote.html' && rt.focus === rtab.id, JSON.stringify(rtab));
+  const rran = await until(() => ev(`return w.threeOK && !!d.querySelector('#plot .main-svg') && d.getElementById('v')?.textContent`), 20000);
+  check('remote page runs through the forward (/_lib/, relative script)', rran === 'r1', String(rran));
+  check('the remote tab shows the machine and the live mark',
+    !!(await top(`const t=document.querySelector('.tab.on'); return t && t.textContent.includes('fake: remote.html') && t.querySelector('i')?.textContent==='live'`)));
+  await ev(`w.marker = 1; return 1`);
+  writeFileSync(rdoc, page('r2'));
+  utimesSync(rdoc, new Date(Date.now() - 5000), new Date(Date.now() - 5000));
+  check('remote page loads again when its file changes', !!(await until(() => ev(`return d.getElementById('v')?.textContent === 'r2' && !w.marker`), 20000)));
+  h = hcm('t77', 'fake');
+  check('--hc-machine for an unknown terminal fails cleanly', h.status === 1 && /no open document/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr}`);
   check('no uncaught exceptions', excs.length === 0, excs[0]);
 } catch (e) {
   check('test run', false, e.stack || String(e));

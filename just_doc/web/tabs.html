@@ -89,7 +89,8 @@ function sync(msg) {
     if (frames[t.id]) continue;
     const f = frames[t.id] = document.createElement('iframe');
     // a live page comes from its own folder, so that its relative links work
-    f.src = t.live ? `live/${t.id}/${encodeURIComponent(t.name)}` : 'view?d=' + t.id;
+    // a page of another machine comes through the server here (t.src, /remote/)
+    f.src = t.src || (t.live ? `live/${t.id}/${encodeURIComponent(t.name)}` : 'view?d=' + t.id);
     f.onload = () => {
       if (t.live) livePage(f);
       if (active === t.id) f.contentWindow.focus();

@@ -25,6 +25,9 @@ Usage
     just-doc --hc-terminal t12   bring the window to the front with the document
                                  that was opened or changed last from the hc
                                  terminal t12 (HC_TERMINAL_ID of the opening shell)
+    just-doc --hc-terminal t12 --hc-machine work2
+                                 the same for a live page that an agent on the
+                                 machine work2 opened there, shown through ssh
     just-doc --guide             print how a coding assistant uses the three
                                  commands above to review a document with you
 """
@@ -35,7 +38,10 @@ import json
 import mimetypes
 import os
 import re
+import shlex
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -157,8 +163,9 @@ run
        just-doc PAGE.html --live
 
 It opens as a tab of the just-doc window with its scripts running, and loads
-again by itself whenever you save the file; run the command once. A live page
-has no comments. Files next to the page can be linked by relative paths.
+again by itself whenever you save the file; run the command once. On a
+machine without a display (over ssh) no window opens: the author sees the
+page from their own machine through ssh. A live page has no comments. Files next to the page can be linked by relative paths.
 These are served by just-doc; use them instead of the internet:
 
     /_lib/page.css                         a small style sheet: readable width, light and
@@ -593,6 +600,8 @@ class Tabs:
         self.live = set()    # ids of the HTML pages that are shown live, not as a PDF
         self.terms = {}      # id -> the hc terminal (HC_TERMINAL_ID) the document was opened from
         self.opened_at = {}  # id -> when the document was opened last (time.time)
+        self.remote = {}     # id -> a live page of a just-doc on another machine, see open_remote
+        self.forwards = Forwards()
         self.quit = False    # set by the q key: the windows close and just-doc stops
         self.changed = threading.Condition()
 
@@ -615,8 +624,34 @@ class Tabs:
         with self.changed:
             if self.docs.pop(key, None) is not None:
                 self.live.discard(key)
+                self.remote.pop(key, None)
                 if self.focus == key:
                     self.focus = next(reversed(self.docs), None)
+                self.version += 1
+                self.changed.notify_all()
+
+    def open_remote(self, info):
+        """Open a live page of another machine as a tab and show it; return its id.
+
+        ``info`` has the machine, its ssh target, the port of the just-doc there,
+        and the id, name, path and file time of the page in that just-doc.
+        """
+        key = hashlib.sha1(f"{info['machine']}\0{info['id']}".encode()).hexdigest()[:10]
+        with self.changed:
+            self.docs[key] = Path(info["path"])
+            self.remote[key] = info
+            self.focus = key
+            self.opened += 1
+            self.version += 1
+            self.changed.notify_all()
+        return key
+
+    def remote_file(self, key, stamp):
+        """Note the file time of a remote page; a new one makes the window load it again."""
+        with self.changed:
+            info = self.remote.get(key)
+            if info is not None and info.get("file") != stamp:
+                info["file"] = stamp
                 self.version += 1
                 self.changed.notify_all()
 
@@ -681,6 +716,14 @@ class Tabs:
     def listing(self):
         tabs = []
         for key, doc in self.docs.items():
+            info = self.remote.get(key)
+            if info:
+                # served by the just-doc of that machine, through an ssh forward and /remote/
+                tabs.append({"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
+                             "live": True, "remote": info["machine"], "rev": 0, "file": info.get("file"),
+                             "src": f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}",
+                             "waiting": False, "pending": False})
+                continue
             try:
                 changed = doc.stat().st_mtime
             except OSError:
@@ -709,6 +752,97 @@ class Tabs:
         if at != seen:
             self.logs[key][1] = at
             commit_pdf(doc, log, now=seen is not None)
+
+
+def config():
+    """Return the settings in ``~/.config/just-doc/config.json``, or none.
+
+    ``{"ssh": "ssh", "machines": {"NAME": {"target": "user@host", "just-doc": "~/bin/just-doc"}}}``:
+    the ssh command, and for a machine name the ssh target and the just-doc command there.
+    """
+    path = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "just-doc" / "config.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        print(f"just-doc: {path} is not read: {exc}", file=sys.stderr)
+        return {}
+
+
+def ssh_command():
+    return shlex.split(config().get("ssh", "ssh"))
+
+
+class Forwards:
+    """Ports of this machine forwarded by ssh to the just-doc of another machine.
+
+    A forward is made when it is first needed and closed after ten minutes in
+    which nothing used it. ssh reuses a shared connection (ControlMaster) to the
+    host when one is open; it does not start one.
+    """
+    IDLE = 600
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.open = {}   # (ssh target, port there) -> [ssh process, port here, when last used]
+
+    def port(self, target, remote):
+        """Return the local port that leads to port ``remote`` on ``target``."""
+        with self.lock:
+            fwd = self.open.get((target, remote))
+            if fwd and fwd[0].poll() is None:
+                fwd[2] = time.monotonic()
+                return fwd[1]
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                local = sock.getsockname()[1]
+            cmd = ssh_command() + ["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ControlMaster=no", "-o", "BatchMode=yes",
+                                   "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30",
+                                   "-L", f"127.0.0.1:{local}:127.0.0.1:{remote}", "--", target]
+            err = tempfile.TemporaryFile()
+            proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err)
+            end = time.monotonic() + 30
+            while True:
+                if proc.poll() is not None:
+                    err.seek(0)
+                    raise RuntimeError(f"ssh {target} could not forward a port: "
+                                       + err.read().decode("utf-8", "replace").strip())
+                try:
+                    socket.create_connection(("127.0.0.1", local), timeout=0.5).close()
+                    break
+                except OSError:
+                    if time.monotonic() > end:
+                        proc.kill()
+                        raise RuntimeError(f"ssh {target} did not forward a port in 30 s") from None
+                    time.sleep(0.1)
+            self.open[(target, remote)] = [proc, local, time.monotonic()]
+            return local
+
+    def reap(self, everything=False):
+        """Close the forwards that were not used for ten minutes, or all of them."""
+        with self.lock:
+            for key, (proc, _, used) in list(self.open.items()):
+                if everything or proc.poll() is not None or time.monotonic() - used > self.IDLE:
+                    proc.terminate()
+                    del self.open[key]
+
+
+def watch_remote(tabs):
+    """Look every two seconds whether a remote page changed, while a window is open; close idle forwards."""
+    while True:
+        time.sleep(2)
+        tabs.forwards.reap()
+        if not tabs.windows:
+            continue
+        for key, info in list(tabs.remote.items()):
+            try:
+                local = tabs.forwards.port(info["target"], info["port"])
+                state = ask(f"http://127.0.0.1:{local}/api/tabs", timeout=3)
+                stamp = next(t["file"] for t in state["tabs"] if t["id"] == info["id"])
+            except Exception:  # noqa: BLE001
+                continue
+            tabs.remote_file(key, stamp)
 
 
 def make_handler(tabs):
@@ -788,10 +922,41 @@ def make_handler(tabs):
             ctype = self.extensions_map.get(file.suffix.lower()) or mimetypes.guess_type(file.name)[0]
             self._send(200, body, ctype or "application/octet-stream")
 
+        def _remote(self):
+            """Pass ``/remote/<id>/<path>`` on to the just-doc of the other machine as ``/<path>``."""
+            url = urllib.parse.urlsplit(self.path)
+            _, _, key, rest = (url.path.split("/", 3) + ["", "", "", ""])[:4]
+            info = tabs.remote.get(key)
+            if info is None:
+                self._json(404, {"error": "not found"})
+                return
+            try:
+                local = tabs.forwards.port(info["target"], info["port"])
+                there = f"http://127.0.0.1:{local}/{rest}" + (f"?{url.query}" if url.query else "")
+                with urllib.request.urlopen(there, timeout=60) as resp:
+                    code, ctype, body = resp.status, resp.headers.get("Content-Type"), resp.read()
+            except urllib.error.HTTPError as exc:
+                code, ctype, body = exc.code, exc.headers.get("Content-Type"), exc.read()
+            except (OSError, RuntimeError) as exc:
+                self._json(502, {"error": f"{info['machine']}: {exc}"})
+                return
+            self._send(code, body, ctype or "application/octet-stream")
+
         def do_GET(self):
             route, key, doc = self._route()
             if route.startswith("/live/"):
                 self._live(route)
+            elif route.startswith("/remote/"):
+                self._remote()
+            elif route == "/api/latest":
+                # for --hc-terminal --print: the document of a terminal, without showing it
+                terminal = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("t", [""])[0]
+                last = tabs.latest(terminal)
+                tab = next((t for t in tabs.listing()["tabs"] if t["id"] == last), None)
+                if tab is None:
+                    self._json(404, {"error": "no document from this terminal"})
+                else:
+                    self._json(200, {k: tab[k] for k in ("id", "name", "path", "live", "file")})
             elif route == "/api/events":
                 self._events()
             elif route == "/api/tabs":
@@ -875,6 +1040,24 @@ def make_handler(tabs):
                     return
                 tabs.select(key)
                 self._json(200, {"ok": True, "name": tabs.docs[key].name, "windows": tabs.windows})
+                return
+            if route == "/api/remote":
+                # a live page of another machine, from --hc-machine; JSON only, as above
+                if self.headers.get("Content-Type") != "application/json":
+                    self._json(400, {"error": "JSON expected"})
+                    return
+                try:
+                    obj = self._body()
+                    info = {k: obj[k] for k in ("machine", "port", "id", "name", "path", "file")}
+                    # the ssh target comes from the machine name here, never from the request
+                    info["target"], info["port"] = machine_target(str(info["machine"]))[0], int(info["port"])
+                    tabs.forwards.port(info["target"], info["port"])
+                except (KeyError, TypeError, ValueError, OSError, RuntimeError) as exc:
+                    self._json(502, {"error": str(exc)})
+                    return
+                windows = tabs.windows
+                tabs.open_remote(info)
+                self._json(200, {"ok": True, "windows": windows})
                 return
             if route == "/api/quit":
                 # as for /api/open: JSON only, so that another web page cannot stop just-doc
@@ -960,8 +1143,15 @@ def make_handler(tabs):
     return Handler
 
 
+def has_display():
+    """Whether a window can be opened: on Linux, not over ssh without a display."""
+    return not sys.platform.startswith("linux") or bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))
+
+
 def open_window(url):
-    """Open ``url`` in a chromeless app window, or in the default browser."""
+    """Open ``url`` in a chromeless app window, or in the default browser; nothing on a machine without a display."""
+    if not has_display():
+        return
     for name in BROWSERS:
         exe = shutil.which(name)
         if exe:
@@ -1094,6 +1284,8 @@ def serve(doc, port, window, live=False):
         try:
             server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(tabs := Tabs()))
         except OSError:
+            if doc is None:
+                continue
             windows = hand_over(url, doc, live, terminal)
             if windows is None:
                 continue
@@ -1101,14 +1293,22 @@ def serve(doc, port, window, live=False):
             if window and not windows:
                 open_window(url)
             return
-        tabs.open(doc, live, terminal)
-        print(f"{doc.name}: {url}  ({'live' if live else 'comments -> ' + comments_path(doc).name}, Ctrl+C to stop)")
+        if doc is None:
+            print(f"{url}  (Ctrl+C to stop)")
+        else:
+            tabs.open(doc, live, terminal)
+            print(f"{doc.name}: {url}  ({'live' if live else 'comments -> ' + comments_path(doc).name}, Ctrl+C to stop)")
+        threading.Thread(target=watch_remote, args=(tabs,), daemon=True).start()
+        # a kill ends it as Ctrl+C does, so that its ssh forwards are closed too
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
         if window:
             open_window(url)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
+        finally:
+            tabs.forwards.reap(everything=True)
         return
     sys.exit("no free port found")
 
@@ -1140,26 +1340,123 @@ def raise_window():
     return False
 
 
-def hc_terminal(terminal, port):
+def fail(message):
+    """End a --hc-terminal that found nothing: a short message on stderr and status 1."""
+    print(f"just-doc: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def hc_terminal(terminal, port, window=True, as_print=False):
     """Show the document that the hc terminal ``terminal`` opened or changed last, and raise the window.
 
-    Exits with status 1 and a short message when no running just-doc has a document from it.
+    With ``as_print`` only print where it is, as JSON: the port of its just-doc
+    and its id, name, path, whether it is live, its file time and its address
+    there. Exits with status 1 and a short message when no running just-doc has
+    a document from that terminal.
     """
     first = port or PORT
     for candidate in range(first, first + 20):
         url = f"http://127.0.0.1:{candidate}/"
         try:
+            if as_print:
+                got = ask(f"{url}api/latest?t={urllib.parse.quote(terminal)}", timeout=1)
+                got["url"] = (f"/live/{got['id']}/{urllib.parse.quote(got['name'])}" if got["live"]
+                              else f"/view?d={got['id']}")
+                print(json.dumps({"port": candidate, **got}, ensure_ascii=False))
+                return
             got = ask(url + "api/focus", {"terminal": terminal}, timeout=1)
         except Exception:  # noqa: BLE001
             continue
-        if not got["windows"]:
+        if window and not got["windows"]:
             open_window(url)
-        else:
+        elif window:
             raise_window()
         print(f"{got['name']}: {url}")
         return
-    print(f"just-doc: no open document from terminal {terminal}", file=sys.stderr)
-    sys.exit(1)
+    fail(f"no open document from terminal {terminal}")
+
+
+def machine_target(name):
+    """Return the ssh target of the hc machine ``name`` and its settings from the config file.
+
+    The config file decides first, then ``hc machine ls``; otherwise the name is the target.
+    """
+    if not name or name.startswith("-"):
+        raise ValueError(f"not a machine name: {name!r}")
+    conf = config().get("machines", {}).get(name, {})
+    if conf.get("target"):
+        return conf["target"], conf
+    if shutil.which("hc"):
+        try:
+            out = subprocess.run(["hc", "machine", "ls"], capture_output=True, text=True, timeout=5).stdout
+            for m in json.loads(out).get("machines", []):
+                if m.get("name") == name and not m.get("via") and m.get("target"):
+                    return m["target"], conf
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    return name, conf
+
+
+def local_just_doc(port):
+    """Return the address of the just-doc that runs here; start one without a window if none does."""
+    first = port or PORT
+    for attempt in range(60):
+        for candidate in range(first, first + 20):
+            url = f"http://127.0.0.1:{candidate}/"
+            try:
+                state = ask(url + "api/tabs", timeout=1)
+            except Exception:  # noqa: BLE001
+                continue
+            if state.get("app") != "just-doc":
+                continue
+            if state.get("version") != VERSION:
+                fail(f"the just-doc at {url} runs an older version that cannot show a page of another machine; "
+                     "stop it (q in its window) and run this command again")
+            return url
+        if attempt == 0:
+            cmd = [sys.executable, "-c", f"import just_doc; just_doc.serve(None, {port}, False)"]
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        time.sleep(0.2)
+    fail("could not start just-doc")
+
+
+def hc_remote(terminal, machine, port, window=True):
+    """Show the live page that the hc terminal ``terminal`` of the machine ``machine`` opened or changed last.
+
+    The just-doc there is asked over ssh (``--hc-terminal ID --print``); its page
+    comes through an ssh forward into a tab of the window here.
+    """
+    try:
+        target, conf = machine_target(machine)
+    except ValueError as exc:
+        fail(str(exc))
+    there = conf.get("just-doc", 'PATH="$HOME/.local/bin:$PATH" just-doc')
+    cmd = ssh_command() + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", target,
+                           f"{there} --hc-terminal {shlex.quote(terminal)} --print"]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        fail(f"ssh {target}: {exc}")
+    if res.returncode == 255:
+        fail(f"ssh {target}: " + (res.stderr.strip().splitlines() or ["failed"])[-1])
+    try:
+        got = json.loads(res.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        fail(f"no open document from terminal {terminal} on {machine}")
+    if not got.get("live"):
+        fail(f"{got['name']} on {machine} is not a live page; only live pages (--live) of another machine are shown")
+    url = local_just_doc(port)
+    info = {"machine": machine, "port": got["port"], "id": got["id"], "name": got["name"],
+            "path": got["path"], "file": got.get("file")}
+    try:
+        state = ask(url + "api/remote", info, timeout=90)
+    except (OSError, RuntimeError) as exc:
+        fail(str(exc))
+    if window and not state["windows"]:
+        open_window(url)
+    elif window:
+        raise_window()
+    print(f"{machine}: {got['name']}: {url}")
 
 
 def show(port, window):
@@ -1339,6 +1636,11 @@ def main():
     ap.add_argument("--hc-terminal", metavar="ID",
                     help="bring the window to the front with the document that was opened or changed last "
                          "from this hc terminal (the HC_TERMINAL_ID of the shell that opened it)")
+    ap.add_argument("--hc-machine", metavar="NAME", default="",
+                    help="with --hc-terminal: the hc machine of the terminal (empty: this one); its live page is "
+                         "shown here through ssh")
+    ap.add_argument("--print", dest="as_print", action="store_true",
+                    help="with --hc-terminal: only print where the document is, as JSON (exit status 1: none)")
     ap.add_argument("--port", type=int, default=0, help=f"port (default: {PORT})")
     ap.add_argument("--no-window", action="store_true", help="start the server only")
     args = ap.parse_args()
@@ -1346,7 +1648,10 @@ def main():
         print(GUIDE, end="")
         return
     if args.hc_terminal:
-        hc_terminal(args.hc_terminal, args.port)
+        if args.hc_machine and not args.as_print:
+            hc_remote(args.hc_terminal, args.hc_machine, args.port, not args.no_window)
+        else:
+            hc_terminal(args.hc_terminal, args.port, not args.no_window, args.as_print)
         return
     if args.pdf is None:
         if args.reply or args.done or args.wait or args.read or args.export:

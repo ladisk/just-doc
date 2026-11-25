@@ -551,6 +551,48 @@ terminal and brings the just-doc window to the front (on Hyprland, through
 no running just-doc has a document from that terminal, it prints a short
 message to stderr, exits with status 1 and opens nothing.
 
+### Pages of another machine
+
+An agent on another machine (an hc machine reached over ssh) runs
+`just-doc page.html --live` there as usual. Without a display (no
+`WAYLAND_DISPLAY` or `DISPLAY`) just-doc opens no window; its server runs on
+127.0.0.1 there and notes the terminal. On that machine
+
+```bash
+just-doc --hc-terminal t12 --print   # {"port": 8700, "id": ..., "name": ..., "url": "/live/...", ...}
+```
+
+prints where the terminal's latest document is (status 1: none). Here,
+
+```bash
+just-doc --hc-terminal t12 --hc-machine work2
+```
+
+asks `work2` over ssh (`just-doc --hc-terminal t12 --print`), forwards a local
+port to the just-doc there (`ssh -N -L`, also through an open shared connection
+of the host), and shows the page as a tab named `work2: page.html`. The page,
+its relative files and its changes come through the forward; `/_lib/` comes
+from the just-doc here. The forward closes ten minutes after the tab was
+closed or the window was closed, and when just-doc stops. Only live pages of
+another machine are shown. With `--hc-machine ""` the terminal is one of this
+machine, so a key binding can always pass `$HC_FOCUSED_MACHINE`:
+
+```bash
+just-doc --hc-terminal "$HC_FOCUSED_TERMINAL" --hc-machine "$HC_FOCUSED_MACHINE"
+```
+
+The machine name is taken as the ssh target, unless `hc machine ls` names
+another target for it, or `~/.config/just-doc/config.json` does:
+
+```json
+{"machines": {"lab": {"target": "klemen@lab.example.org", "just-doc": "~/bin/just-doc"}}}
+```
+
+`just-doc` there is run as `PATH="$HOME/.local/bin:$PATH" just-doc` unless the
+config names another command; a top-level `"ssh"` replaces the ssh command.
+ssh runs with `BatchMode=yes`, so the host must be reachable without typing a
+password (a key in the agent).
+
 ## Third-party code
 
 `web/pdfjs/` is a copy of [PDF.js](https://mozilla.github.io/pdf.js/) 4.10.38

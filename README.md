@@ -477,6 +477,60 @@ scripts, data files) work; nothing outside that folder is served. When the
 HTML file changes, the page is loaded again and keeps its scroll position. A
 change in another file of the folder is not seen; save the HTML file again.
 
+just-doc serves Plotly and three.js at fixed addresses, so a page that an
+assistant writes needs neither the internet nor copies of them:
+
+```text
+/_lib/page.css                         a small style sheet: readable width, light and
+                                       dark, tables, and the classes card, grid, stat,
+                                       plot (a 480 px high box) and view (70 % of the
+                                       window); body class="wide" uses the full width
+/_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly
+/_lib/three/three.module.js            three.js r186 as an ES module
+/_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
+```
+
+The three.js add-ons import `three.module.js` by a relative path, so a page
+needs no import map. A plot:
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Frequency response</title>
+<link rel="stylesheet" href="/_lib/page.css">
+<script src="/_lib/plotly.min.js"></script>
+<h1>Frequency response</h1>
+<div id="plot" class="plot"></div>
+<script>
+  const f = Array.from({length: 500}, (_, i) => i * 0.2);
+  const H = f.map(x => 1 / Math.hypot(1 - (x / 40) ** 2, 0.05 * x / 40));
+  Plotly.newPlot('plot', [{x: f, y: H}], {xaxis: {title: {text: 'f [Hz]'}},
+    yaxis: {type: 'log', title: {text: '|H|'}}}, {responsive: true});
+</script>
+```
+
+and a model that turns with the mouse:
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Part</title>
+<link rel="stylesheet" href="/_lib/page.css">
+<div id="view" class="view"></div>
+<script type="module">
+  import * as THREE from '/_lib/three/three.module.js';
+  import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
+  const box = document.getElementById('view'), w = box.clientWidth, h = box.clientHeight;
+  const renderer = new THREE.WebGLRenderer({antialias: true});
+  renderer.setSize(w, h); box.append(renderer.domElement);
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+  camera.position.set(3, 2, 4);
+  scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+  const controls = new OrbitControls(camera, renderer.domElement);
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+```
+
 The page has the keyboard: `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a
 text field, `H` / `L` still change or close the tab.
 
@@ -484,3 +538,9 @@ text field, `H` / `L` still change or close the tab.
 
 `web/pdfjs/` is a copy of [PDF.js](https://mozilla.github.io/pdf.js/) 4.10.38
 (Apache License 2.0, see `web/pdfjs/LICENSE`).
+
+`web/_lib/plotly.min.js` is [Plotly](https://plotly.com/javascript/) 4.1.2 (MIT)
+and `web/_lib/three/` is [three.js](https://threejs.org) r186 (0.186.1, MIT),
+taken from the npm packages; their licences are in `web/_lib/licenses/`. In
+the three.js add-ons and utils the import from `'three'` is changed to
+`'../three.module.js'`; nothing else is changed.

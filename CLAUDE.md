@@ -16,6 +16,10 @@ the JSON format, export and the LaTeX source lookup.
   documents; a later `just-doc file` hands its document over to it as a tab.
 - `just_doc/web/pdfjs/` — a bundled copy of PDF.js 4.10.38 (third-party, Apache
   2.0). Do not edit it.
+- `just_doc/web/_lib/` — served at `/_lib/` for pages shown with `--live`:
+  copies of Plotly 4.1.2 and three.js r186 (MIT, licences in `licenses/`; only
+  the three.js add-on imports were made relative), and `page.css`, our own small
+  style sheet.
 - `pyproject.toml` — packaging; built with hatchling.
 
 ## Design

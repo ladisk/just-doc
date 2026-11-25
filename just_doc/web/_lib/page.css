@@ -1,0 +1,96 @@
+/* just-doc page.css: a plain, readable look for pages shown with just-doc --live.
+   Link it with <link rel="stylesheet" href="/_lib/page.css">. Light and dark follow the system. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --line: #d0d7de;
+  --card: #f6f8fa;
+  --accent: #0969da;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+  --code: #eff1f3;
+  --radius: 8px;
+  --width: 960px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8d96a0;
+    --line: #30363d;
+    --card: #161b22;
+    --accent: #4493f8;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --code: #1f242c;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0 auto;
+  max-width: var(--width);
+  padding: 24px 20px 48px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+/* a page with a plot or a 3D view that should use the whole window */
+body.wide { max-width: none; }
+
+h1, h2, h3, h4 { line-height: 1.25; margin: 1.6em 0 0.5em; }
+h1 { font-size: 1.8em; margin-top: 0.4em; }
+h2 { font-size: 1.35em; padding-bottom: 0.25em; border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.1em; }
+p, ul, ol, table, pre, figure, .card { margin: 0 0 1em; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+small, .muted { color: var(--muted); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
+img, svg, canvas, video { max-width: 100%; }
+
+code, kbd, pre { font: 0.9em/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+code { background: var(--code); padding: 0.1em 0.35em; border-radius: 4px; }
+pre { background: var(--code); padding: 12px 14px; border-radius: var(--radius); overflow-x: auto; }
+pre code { background: none; padding: 0; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 0.35em; }
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-weight: 600; border-bottom-width: 2px; }
+tbody tr:hover { background: var(--card); }
+td.num, th.num { text-align: right; }
+
+figure { text-align: center; }
+figcaption { color: var(--muted); font-size: 0.9em; margin-top: 0.4em; }
+
+/* a box around a group of content: <div class="card"><h3>Title</h3> ... </div> */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card.ok { border-left: 4px solid var(--ok); }
+.card.warn { border-left: 4px solid var(--warn); }
+.card.bad { border-left: 4px solid var(--bad); }
+
+/* cards side by side, as many as fit: <div class="grid"> <div class="card">...</div> ... </div> */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 0 0 1em; }
+.grid > .card { margin: 0; }
+
+/* a big number with a label: <div class="card stat"><b>42.1 Hz</b><span>first mode</span></div> */
+.stat b { display: block; font-size: 1.8em; font-weight: 600; line-height: 1.2; }
+.stat span { color: var(--muted); font-size: 0.9em; }
+
+/* the box of a Plotly plot or a three.js view */
+.plot { width: 100%; height: 480px; }
+.view { width: 100%; height: 70vh; border-radius: var(--radius); overflow: hidden; }

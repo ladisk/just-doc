@@ -145,6 +145,62 @@ Everything goes through these commands; do not edit the .comments.json file.
 
 Other commands: just-doc FILE --read prints all comments, also the ones that
 are done or answered; add --json for the full data.
+Showing a page live
+-------------------
+
+To show the author a plot to zoom or a model to turn, write an HTML file and
+run
+
+       just-doc PAGE.html --live
+
+It opens as a tab of the just-doc window with its scripts running, and loads
+again by itself whenever you save the file; run the command once. A live page
+has no comments. Files next to the page can be linked by relative paths.
+These are served by just-doc; use them instead of the internet:
+
+    /_lib/page.css                         a small style sheet: readable width, light and
+                                           dark, tables, and the classes card, grid, stat,
+                                           plot (a 480 px high box) and view (70 % of the
+                                           window); body class="wide" uses the full width
+    /_lib/plotly.min.js                    Plotly 4.1.2, the global Plotly
+    /_lib/three/three.module.js            three.js r186 as an ES module
+    /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
+
+A plot:
+
+    <!doctype html>
+    <meta charset="utf-8">
+    <title>Frequency response</title>
+    <link rel="stylesheet" href="/_lib/page.css">
+    <script src="/_lib/plotly.min.js"></script>
+    <h1>Frequency response</h1>
+    <div id="plot" class="plot"></div>
+    <script>
+      const f = Array.from({length: 500}, (_, i) => i * 0.2);
+      const H = f.map(x => 1 / Math.hypot(1 - (x / 40) ** 2, 0.05 * x / 40));
+      Plotly.newPlot('plot', [{x: f, y: H}], {xaxis: {title: {text: 'f [Hz]'}},
+        yaxis: {type: 'log', title: {text: '|H|'}}}, {responsive: true});
+    </script>
+
+A model that turns with the mouse:
+
+    <!doctype html>
+    <meta charset="utf-8">
+    <title>Part</title>
+    <link rel="stylesheet" href="/_lib/page.css">
+    <div id="view" class="view"></div>
+    <script type="module">
+      import * as THREE from '/_lib/three/three.module.js';
+      import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
+      const box = document.getElementById('view'), w = box.clientWidth, h = box.clientHeight;
+      const renderer = new THREE.WebGLRenderer({antialias: true});
+      renderer.setSize(w, h); box.append(renderer.domElement);
+      const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+      camera.position.set(3, 2, 4);
+      scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+      const controls = new OrbitControls(camera, renderer.domElement);
+      renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    </script>
 """
 BROWSERS = ("chromium", "brave", "google-chrome-stable", "google-chrome", "chromium-browser")
 

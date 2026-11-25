@@ -27,8 +27,30 @@
   #side { position: fixed; right: 0; top: 22px; bottom: 0; width: 340px; display: none; flex-direction: column;
           background: #2b2d30; color: #d8dade; border-left: 1px solid #45484d; font-size: 13px; line-height: 1.4; }
   body.one #side { top: 0; }
+  /* the key bar of a live page, as in the PDF viewer; the page and the panel end above it */
+  #foot { position: fixed; left: 0; right: 0; bottom: 0; min-height: 22px; z-index: 20; background: #2b2d30;
+          color: #ddd; display: none; align-items: center; flex-wrap: wrap; gap: 2px 12px; padding: 3px 10px;
+          box-sizing: border-box; font-size: 11px; line-height: 1.3; }
+  body.livefoot #foot { display: flex; }
+  #foot #fkeys { flex: 1; min-width: 0; }
+  #mode { color: #ffd166; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; flex: none; }
+  #fhint { color: #ffd166; }
+  #foot kbd { background: #555; border-radius: 3px; padding: 0 3px; color: #fff; font: inherit; }
+  body.livefoot iframe.on { height: calc(100% - 22px - var(--foot, 22px)); }
+  body.livefoot.one iframe.on { height: calc(100% - var(--foot, 22px)); }
+  body.livefoot #side { bottom: var(--foot, 22px); }
+  #help { position: fixed; inset: 0; z-index: 50; background: rgba(20,20,22,.72); display: none;
+          align-items: center; justify-content: center; }
+  #help.open { display: flex; }
+  #help .card { background: #f4f4f2; color: #222; border-radius: 8px; padding: 18px 24px; max-width: 560px;
+          max-height: 82vh; overflow: auto; box-shadow: 0 8px 30px rgba(0,0,0,.5); font-size: 13px; line-height: 1.4; }
+  #help h2 { margin: 0 0 12px; font-size: 15px; }
+  #help input { width: 100%; box-sizing: border-box; margin-bottom: 10px; font: inherit; padding: 3px 6px; }
+  #help table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  #help td { padding: 3px 16px 3px 0; vertical-align: top; }
+  #help td:first-child { white-space: nowrap; color: #555; }
+  #help kbd { background: #ddd; border: 1px solid #bbb; border-radius: 3px; padding: 0 5px; font: inherit; color: #222; }
   #list { flex: 1; overflow-y: auto; padding: 6px; }
-  #hint { padding: 6px 8px; border-top: 1px solid #45484d; color: #a9adb3; font-size: 11px; line-height: 20px; }
   .none { color: #a9adb3; padding: 8px; }
   .it { background: #35383c; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; cursor: pointer; border-left: 3px solid transparent; }
   .it.on { border-left-color: #ff9900; background: #3d4045; }
@@ -50,6 +72,26 @@
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
+<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="help"><div class="card">
+  <h2>Keys of a live page — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
+  <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
+  <table>
+    <tr><td><kbd>a</kbd></td><td>comment on the selected text or on the element under the pointer; on a selected comment: reply</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous comment</td></tr>
+    <tr><td><kbd>x</kbd></td><td>mark the comment done; <kbd>x</kbd> again opens it</td></tr>
+    <tr><td><kbd>za</kbd></td><td>open or close the comment in the list</td></tr>
+    <tr><td><kbd>d</kbd></td><td>delete the selected comment</td></tr>
+    <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
+    <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>hand the comments over to the <code>just-doc --wait</code> that is waiting for them</td></tr>
+    <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>w</kbd></td><td>close the tab</td></tr>
+    <tr><td><kbd>q</kbd> <kbd>y</kbd></td><td>stop just-doc and close its windows</td></tr>
+    <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>deselect the comment</td></tr>
+  </table>
+</div></div>
 <script src="live.js"></script>
 <script>
 // The window: one tab per open document. Each document is a full viewer in its own frame,

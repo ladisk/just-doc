@@ -188,6 +188,10 @@ const LIVE = (() => {
 
   function draw() {
     const st = S[active];
+    // the key bar shows while a live page is shown; the page and the panel end above it
+    const foot = document.getElementById('foot');
+    document.body.classList.toggle('livefoot', !!tabs.find(t => t.id === active)?.live);
+    document.body.style.setProperty('--foot', (foot.offsetHeight || 22) + 'px');
     for (const id in S) {
       const on = id === active && visible(S[id]);
       S[id].f.style.width = on ? 'calc(100% - 340px)' : '';
@@ -207,9 +211,7 @@ const LIVE = (() => {
       if (st.editing?.id === a.id) h += `<textarea id="ed" rows="3" placeholder="${st.editing.mode === 'reply' ? 'reply' : 'comment'}: Enter saves, Esc cancels"></textarea>`;
       return h + '</div>';
     }).join('');
-    side.innerHTML = `<div id="list">${rows || '<p class="none">No comments. Select text or point at an element and press <kbd>a</kbd>.</p>'}</div>
-      <div id="hint"><kbd>a</kbd> comment/reply <kbd>x</kbd> done <kbd>n</kbd>/<kbd>p</kbd> next <kbd>za</kbd> open <kbd>d</kbd> delete
-      <kbd>c</kbd> list <kbd>Ctrl</kbd><kbd>Enter</kbd> hand over</div>`;
+    side.innerHTML = `<div id="list">${rows || '<p class="none">No comments. Select text or point at an element and press <kbd>a</kbd>.</p>'}</div>`;
     const ed = side.querySelector('#ed');
     if (ed) {
       ed.value = st.editing.text || '';
@@ -341,9 +343,45 @@ const LIVE = (() => {
   }
 
   // the keys of a live page; true when the key was used
+  // ? : the keys of a live page, filtered with /
+  const help = document.getElementById('help'), hq = document.getElementById('hq');
+  function filterHelp() {
+    const q = hq.value.trim().toLowerCase();
+    for (const tr of help.querySelectorAll('tr')) tr.hidden = q && !tr.textContent.toLowerCase().includes(q);
+  }
+  function toggleHelp() {
+    help.classList.toggle('open');
+    hq.value = '';
+    hq.blur();
+    filterHelp();
+    if (!help.classList.contains('open')) S[active]?.f.contentWindow.focus();
+  }
+  hq.addEventListener('input', filterHelp);
+  hq.addEventListener('keydown', e => {
+    // Enter keeps the filter and leaves the field; Esc clears it, and closes the list when it is empty
+    if (e.key === 'Enter') { e.preventDefault(); hq.blur(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (hq.value) { hq.value = ''; filterHelp(); hq.blur(); } else toggleHelp();
+    }
+    e.stopPropagation();
+  });
+  // the same keys while the window itself has the keyboard (the list is open, the field left)
+  document.addEventListener('keydown', e => {
+    if (e.target === hq || !help.classList.contains('open')) return;
+    if (S[active] && key(e, active)) e.preventDefault();
+  });
+  let quitAt = 0;
+  const fhint = msg => { document.getElementById('fhint').textContent = msg; };
+
   function key(e, id) {
     const st = S[id];
     if (!st) return false;
+    if (help.classList.contains('open')) {
+      if (e.key === 'Escape' || e.key === '?') toggleHelp();
+      else if (e.key === '/') hq.focus();
+      return !e.ctrlKey && !e.altKey;
+    }
     if (e.ctrlKey && !e.altKey && e.key === 'Enter') { handOver(st); return true; }
     if (e.ctrlKey || e.altKey || e.metaKey) return false;
     const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
@@ -355,7 +393,20 @@ const LIVE = (() => {
       return true;
     }
     st.z = 0;
+    // q asks first: it stops just-doc and closes its windows, also for a --wait that is waiting
+    if (quitAt) {
+      quitAt = 0;
+      fhint('');
+      if (e.key === 'y') fetch('api/quit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      return true;
+    }
     switch (e.key) {
+      case '?': toggleHelp(); return true;
+      case 'q':
+        quitAt = Date.now();
+        fhint('stop just-doc and close the window? y');
+        setTimeout(() => { if (Date.now() - quitAt >= 4000) { quitAt = 0; fhint(''); } }, 4000);
+        return true;
       case 'z': st.z = Date.now(); return true;
       case 'a': add(st); return true;
       case 'x':

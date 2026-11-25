@@ -215,6 +215,23 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
       && d.documentElement.scrollWidth <= W && d.getElementById('intro').getBoundingClientRect().width <= 960`), 5000)),
     await ev(`return [d.documentElement.clientWidth, d.documentElement.scrollWidth, d.getElementById('plot').getBoundingClientRect().width]`));
   check('the plot still runs', !!(await ev(`return !!d.querySelector('#plot .main-svg') && typeof d.getElementById('plot')._fullLayout === 'object'`)));
+  // the key bar at the bottom, as in the PDF viewer
+  check('the key bar spans the window at the bottom; page and panel end above it', !!(await top(`const f = document.getElementById('foot').getBoundingClientRect(),
+    p = document.querySelector('iframe.on').getBoundingClientRect(), s = document.getElementById('side').getBoundingClientRect();
+    return f.width === innerWidth && Math.abs(f.bottom - innerHeight) < 1 && p.bottom <= f.top + 0.5 && s.bottom <= f.top + 0.5
+      && /hand over/.test(document.getElementById('foot').textContent) && !document.querySelector('#side kbd + kbd')`)));
+  await press('?');
+  check('? opens the list of live keys', !!(await top(`return document.getElementById('help').classList.contains('open')`)));
+  await press('/');
+  await top(`const q = document.getElementById('hq'); q.value = 'undo'; q.dispatchEvent(new Event('input')); return 1`);
+  check('/ filters it', (await top(`return [...document.querySelectorAll('#help tr')].filter(t => !t.hidden).length`)) === 1);
+  await top(`const q = document.getElementById('hq'); q.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+    q.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true})); return 1`);
+  check('Esc clears and closes it', !(await top(`return document.getElementById('help').classList.contains('open')`)));
+  await press('q');
+  check('q asks before it quits', /stop just-doc/.test(await top(`return document.getElementById('fhint').textContent`)));
+  await press('n');
+  check('a key other than y keeps just-doc', (await top(`return document.getElementById('fhint').textContent`)) === '' && (await fetch(base + '/api/tabs')).ok);
   await ev(`d.querySelector('textarea[name=long]').dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
   check('Ctrl+Enter ends --live --wait', (await until(() => wexit !== null, 15000)) && wexit === 0, wout.slice(-300));
   const want = { pick: 'B', ok: true, tags: ['y'], many: ['m2'], note: 'hi', long: 'two\nlines' };

@@ -669,6 +669,11 @@ is outlined, with a dot where the mouse was and its number `#n`.
 | `c` | hide or show the comment panel |
 | `Esc` | unselect the comment |
 | `Ctrl` `Enter` | hand the comments and the answers over to the `just-doc --live --wait` that waits |
+| `q` `y` | stop just-doc and close its windows |
+| `?` | show or hide the list of these keys; `/` filters it |
+
+As in the PDF viewer, a bar at the bottom of the window shows the main keys;
+the page and the panel end above it.
 
 `Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a text field, `H` / `L`
 still change or close the tab. All other keys belong to the page.

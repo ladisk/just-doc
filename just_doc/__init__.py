@@ -128,6 +128,21 @@ The author reads a PDF, a markdown or an HTML file in the just-doc window and wr
 comments on pieces of its text. You answer the comments and fix the source.
 Everything goes through these commands; do not edit the .comments.json file.
 
+Which command the author's words ask for:
+
+    "open it as PDF", or no way named    just-doc FILE --wait
+        FILE is a .pdf, .md or .html; just-doc makes the PDF of a markdown or
+        HTML file itself and shows it again when the source changes. Do not
+        make a PDF yourself.
+    "open the HTML", "show it live"      just-doc FILE.html --live --wait
+        the page as it is, scripts running (see "Showing a page live").
+
+Both are commented, answered and closed the same way, with the same keys in
+the window. On a machine without a display (over ssh) no window opens there:
+the author brings the document to their own machine with their key for it
+(in hc: Ctrl+Space f), a PDF as well as a live page. Never serve the files
+yourself (no http server, no port) and never send the author a URL instead.
+
 1. Open the document and wait for the comments:
 
        just-doc FILE --wait

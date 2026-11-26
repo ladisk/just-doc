@@ -93,6 +93,7 @@ other `--wait` starts within a few seconds.
 | `Ctrl` `Shift` `S` | markdown or HTML file: save the PDF made from it as `notes.pdf` next to it, without comments |
 | `H` / `L` | previous / next tab of the group, when several documents are open; `Alt` `←` / `Alt` `→` do the same |
 | `Alt` `↑` / `Alt` `↓` | previous / next group of tabs, see below |
+| `Alt` `s` | hide or show the list of groups at the left of the window; the choice is kept |
 | `Ctrl` `w` | close the tab; `Alt` `w` does the same |
 | `q` then `y` | stop just-doc and close its windows; a `--wait` that is waiting ends too. Closing the window alone leaves just-doc running, and `just-doc` without a file opens the window again |
 | `?` | show or hide the full key list; in it `/` filters the keys by what you type |
@@ -118,15 +119,16 @@ page, zoom, cursor and search.
 
 One session of an assistant often opens several documents. The tabs are grouped
 by the hc terminal that opened them (`HC_TERMINAL_ID`, on its machine); documents
-opened without a terminal form the group `other`. With several groups the window
-has two rows. The top row has one entry per group, with its name and its tab
-count (`knauf 3`); the entry shows the number of new replies of the tabs of the
-group and an orange dot when a `--wait` waits or a `Ctrl+Enter` was not taken
-yet. The groups keep their order. The bottom row has the tabs of the shown group
-only. Each group has a colour: a stripe on its entry, the entry of the shown
-group filled with it, and a line under the bottom row. With one group there is
-only the bottom row. A click on an entry, or `Alt+Down` / `Alt+Up`, shows that
-group (its tab shown last). `H` / `L` and `Alt+Left` / `Alt+Right` change the
+opened without a terminal form the group `other`. The row of tabs at the top
+has the tabs of the shown group only; the × on a tab closes it, as `Ctrl+w`
+does. With several groups a list at the left of the window has one row per
+group: its name, the machine of a group of another machine, the number of new
+replies of its tabs, an orange dot when a `--wait` waits or a `Ctrl+Enter` was
+not taken yet, and its tab count. The groups keep their order. The shown group
+has a lighter row with a blue bar at its left. `Alt+s` hides or shows the list;
+the window keeps the choice, and with the list hidden the name of the shown
+group is in front of its tabs. With one group there is no list. A click on a
+row, or `Alt+Down` / `Alt+Up`, shows that group (its tab shown last). `H` / `L` and `Alt+Left` / `Alt+Right` change the
 tab within the group and wrap. `--hc-terminal` and a new document show their own
 group. A group ends with its last tab.
 
@@ -797,8 +799,8 @@ comment leaves the list and the page at the next `Ctrl` `Enter`.
 As in the PDF viewer, a bar at the bottom of the window shows the main keys;
 the page and the panel end above it.
 
-`Alt+Left` / `Alt+Right`, `Alt+Up` / `Alt+Down` (the group), `Ctrl+w` and, outside a text field, `H` / `L`
-still change or close the tab. All other keys belong to the page.
+`Alt+Left` / `Alt+Right`, `Alt+Up` / `Alt+Down` (the group), `Alt+s` (the list of groups), `Ctrl+w` and,
+outside a text field, `H` / `L` still change or close the tab. All other keys belong to the page.
 
 The comments are kept in `page.live.comments.json` next to the page, with the
 fields of the PDF comments where they apply (`n`, `text` for the quote,

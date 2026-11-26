@@ -962,7 +962,7 @@ const LIVE = (() => {
     document.body.style.setProperty('--foot', (foot.offsetHeight || 22) + 'px');
     for (const id in S) {
       const on = id === active && visible(S[id]);
-      S[id].f.style.width = on ? 'calc(100% - 340px)' : '';
+      S[id].f.style.width = on ? 'calc(100% - var(--left) - 340px)' : '';
       if (S[id].old) { S[id].old.style.width = S[id].f.style.width; S[id].old.style.display = id === active ? '' : 'none'; }
       marks(S[id]);
     }

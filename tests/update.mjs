@@ -88,7 +88,7 @@ try {
   await cmd('Runtime.enable'); await cmd('Page.enable');
   await cmd('Page.navigate', { url: `http://127.0.0.1:${P}/` });
   const top = async e => (await cmd('Runtime.evaluate', { expression: `(()=>{${e}})()`, returnByValue: true })).result?.value;
-  check('the window shows both tabs', !!(await until(() => top(`const n = () => document.querySelectorAll('.tab').length + [...document.querySelectorAll('.chip.other small')].reduce((s, e) => s + +e.textContent.replace(/[^0-9]/g, ''), 0); return n() === 2`), 10000)));
+  check('the window shows both tabs', !!(await until(() => top(`const n = () => document.querySelectorAll('.tab').length + [...document.querySelectorAll('.grow:not(.cur) .n')].reduce((s, e) => s + +e.textContent, 0); return n() === 2`), 10000)));
   await top(`window.marker = 1; return 1`);
 
   // 3. a command of this version updates it
@@ -108,7 +108,7 @@ try {
   check('a --wait gets that Ctrl+Enter at once', r.status === 0 && got?.answers?.answers?.pick === 'B'
     && got.comments?.[0]?.comment === 'keep me', r.stdout + r.stderr);
   check('the window stays and loads itself again', !!(await until(() => top(
-    `const n = () => document.querySelectorAll('.tab').length + [...document.querySelectorAll('.chip.other small')].reduce((s, e) => s + +e.textContent.replace(/[^0-9]/g, ''), 0); return !window.marker && n() === 3`), 15000)));
+    `const n = () => document.querySelectorAll('.tab').length + [...document.querySelectorAll('.grow:not(.cur) .n')].reduce((s, e) => s + +e.textContent, 0); return !window.marker && n() === 3`), 15000)));
 
   // 4. with a --wait waiting on it, another version is left alone
   bg(P + 1, 't1', 'old-build', join(site, 'd.html'), '--live');

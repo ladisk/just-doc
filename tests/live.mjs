@@ -500,11 +500,11 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   run('t2', docC, '--live');
   const ids = Object.fromEntries((await (await fetch(base + '/api/tabs')).json()).tabs.map(t => [t.name, t.id]));
   check('three live tabs', Object.keys(ids).length === 3, JSON.stringify(ids));
-  // the bar shows the tabs of the shown group (t2: c.html) and one chip for the other (t1: two tabs)
+  // the bar shows the tabs of the shown group (t2: c.html) and one row in the list for the other (t1: two tabs)
   check('the shown live tab has the live mark, the others of its group a dot', !!(await until(() => top(
     `const t = [...document.querySelectorAll('.tab')]; return t.filter(x => x.classList.contains('on')).length === 1 && t.filter(x => x.classList.contains('on')).every(x => x.querySelector('i')?.textContent === 'live')
       && t.filter(x => !x.classList.contains('on')).every(x => x.querySelector('i.dot') && !x.querySelector('i').textContent)
-      && !!document.querySelector('.chip.cur') && document.querySelector('.chip.other')?.textContent.includes('2')`), 5000)));
+      && !!document.querySelector('.grow.cur') && document.querySelector('.grow:not(.cur) .n')?.textContent === '2'`), 5000)));
   // no hyprctl on the PATH, so no real window is raised
   const hc = term => spawnSync(venv, ['--hc-terminal', term, '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });

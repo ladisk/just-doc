@@ -56,7 +56,7 @@ try {
 
   procs.push(spawn(jdbin, [a, '--live', '--port', String(SP), '--no-window'], { env: env('t1', { JUST_DOC_BUILD: 'old' }), stdio: 'ignore' }));
   if (!(await until(async () => (await api()).tabs.length === 1, 30000))) throw new Error('server did not start');
-  // 1. one group: no chip
+  // 1. one group: no list of groups
   // 2. the window in headless Chromium
   const bin = ['chromium', 'google-chrome-stable', 'google-chrome', 'brave'].find(has);
   if (!bin) throw new Error('no chromium/chrome/brave found');
@@ -80,21 +80,27 @@ try {
     const g = await cmd('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(process.env.SHOTS, name), Buffer.from(g.data, 'base64'));
   };
-  // the tab bar as text: chips and tabs
-  // the label of the shown group (its chip stays in place; the groups keep their order)
-  const cur = () => top(`return document.querySelector('#groups .chip.cur')?.childNodes[0].textContent ?? null`);
-  // the two rows as text: [label count] for the groups, then | and the tabs of the shown group
-  const bar = () => top(`const g = [...document.querySelectorAll('#groups .chip')].map(e => '[' + e.childNodes[0].textContent + e.querySelector('small').textContent + ']').join('');
-    const t = [...document.querySelectorAll('#tabs > div')].filter(e => e.id !== 'keys').map(e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()).join('|');
+  // the label of a row in the list of groups: the machine (small) in front of the name, as in /api/tabs
+  const LABEL = `const lab = e => (e.querySelector('small') ? e.querySelector('small').textContent + ': ' : '') + e.querySelector('.nm').textContent;`;
+  // the label of the shown group (its row stays in place; the groups keep their order)
+  const cur = () => top(`${LABEL} const r = document.querySelector('#groups .grow.cur'); return r ? lab(r) : null`);
+  // the list and the row of tabs as text: [label count] for the groups, then / and the tabs of the shown group
+  const bar = () => top(`${LABEL} const g = [...document.querySelectorAll('#groups .grow')].map(e => '[' + lab(e) + ' ' + e.querySelector('.n').textContent + ']').join('');
+    const t = [...document.querySelectorAll('#strip .tab .nm')].map(e => e.textContent).join('|');
     return g + '/' + t`);
-  const shown = () => top(`return [...(document.querySelector('.tab.on')?.childNodes || [])].filter(n => n.nodeType === 3).map(n => n.textContent).join('')`);
+  const shown = () => top(`return document.querySelector('.tab.on .nm')?.textContent ?? ''`);
+  // where the list, the row of tabs and the shown page are: [list shown, list width, tabs left, tabs top, tabs height, page left, page top]
+  const geo = async () => (await top(`const r = s => document.querySelector(s)?.getBoundingClientRect(), g = document.querySelector('#groups'), t = r('#tabs'), f = r('iframe.on');
+    return [getComputedStyle(g).display !== 'none', g.getBoundingClientRect().width, t.left, t.top, t.height, f.left, f.top].join()`)).split(',');
   // a key in the shown frame, as the viewer or the live page gets it
   const key = (k, mods = {}) => top(`const f = document.querySelector('iframe.on'); const w = f.contentWindow, d = w.document;
     (f.contentDocument.querySelector('#pdfroot, #viewer') ? d : d.body).dispatchEvent(new w.KeyboardEvent('keydown', {key: ${JSON.stringify(k)}, bubbles: true, ...${JSON.stringify(mods)}})); return 1`);
   const groups = async () => (await api()).groups;
   const label = async gid => (await groups()).find(g => g.id === gid)?.label;
 
-  check('one group: no top row', !!(await until(async () => (await bar()) === '/a.html', 10000)), await bar());
+  check('one group: no list of groups', !!(await until(async () => (await bar()) === '/a.html', 10000)), await bar());
+  let gv = await geo();
+  check('one group: the tabs from the left edge, 30px high, the page under them', gv.join() === 'false,0,0,0,30,0,30', gv.join());
 
   // 3. two terminals, two folders
   run('t1', b, '--live'); run('t2', x, '--live'); run('t2', y, '--live');
@@ -103,14 +109,30 @@ try {
   check('label of t1: the repository folder, not the subfolder of a.html', await label('t1') === 'kolektor-etra-2026', await label('t1'));
   check('label of t2: the folder of its pages', await label('t2') === 'knauf', await label('t2'));
   check('every tab names its group, the old fields stay', st.tabs.every(t => t.group && t.id && t.name && t.path && 'live' in t && 'rev' in t), JSON.stringify(st.tabs[0]));
-  check('the rows: a chip per group in order, the tabs of the shown group only',
+  check('the list: a row per group in order; the tabs of the shown group only',
     !!(await until(async () => (await bar()) === '[kolektor-etra-2026 2][knauf 2]/x.html|y.html', 8000)), await bar());
-  const geo = () => top(`const r = s => document.querySelector(s)?.getBoundingClientRect(), g = r('#groups'), t = r('#tabs'), f = r('iframe.on');
-    return [g.height, t.top, f.top, getComputedStyle(document.querySelector('#tabs'), '::after').backgroundColor, getComputedStyle(document.querySelector('.chip.cur')).getPropertyValue('--c')].join()`);
-  const gv = (await geo()).split(',');
-  check('two rows: groups 22px, tabs below it, pages from 44px', gv[0] === '22' && gv[1] === '22' && gv[2] === '44', await geo());
-  check('every group has its own colour, one chip is the shown one',
-    !!(await top(`const c = [...document.querySelectorAll('#groups .chip')].map(e => e.style.getPropertyValue('--c')); return new Set(c).size === c.length && document.querySelectorAll('#groups .chip.cur').length === 1`)));
+  gv = await geo();
+  check('the list at the left (180px), the tabs and the page right of it', gv.join() === 'true,180,180,0,30,180,30', gv.join());
+  check('one accent for the shown group, no colour per group; one row is the shown one',
+    !!(await top(`const rows = [...document.querySelectorAll('#groups .grow')];
+      return rows.every(e => !e.getAttribute('style')) && document.querySelectorAll('#groups .grow.cur').length === 1
+        && getComputedStyle(document.querySelector('.grow.cur')).boxShadow.includes('rgb(47, 123, 255)')
+        && rows.filter(e => !e.classList.contains('cur')).every(e => !getComputedStyle(e).boxShadow.includes('rgb(47, 123, 255)'))`)));
+
+  // Alt+s hides the list, kept after a reload; Alt+s shows it again
+  await key('s', { altKey: true }); await sleep(300);
+  gv = await geo();
+  check('Alt+s hides the list: the tabs and the page from the left edge', gv.join() === 'false,0,0,0,30,0,30', gv.join());
+  check('with the list hidden the name of the group is in front of its tabs', await top(`return document.getElementById('where')?.textContent`) === 'knauf');
+  check('the choice is kept', await top(`return localStorage.getItem('jd-rail')`) === 'hidden');
+  await cmd('Page.reload'); await sleep(1500);
+  check('after a reload the list stays hidden', !!(await until(async () => (await geo()).join() === 'false,0,0,0,30,0,30', 8000)), (await geo()).join());
+  await key('ArrowDown', { altKey: true }); await sleep(400);
+  check('with the list hidden Alt+Down still changes the group', (await top(`return document.getElementById('where')?.textContent`)) === 'kolektor-etra-2026');
+  await key('ArrowUp', { altKey: true }); await sleep(400);
+  await key('s', { altKey: true }); await sleep(300);
+  check('Alt+s shows the list again', (await geo()).join() === 'true,180,180,0,30,180,30' && await top(`return localStorage.getItem('jd-rail')`) === 'shown', (await geo()).join());
+  await top(`document.querySelectorAll('#strip .tab')[1].click(); return 1`); await sleep(300);
   check('the new document is shown (group t2, y.html)', await shown() === 'y.html' || (await shown())?.includes('y.html'), await shown());
 
   // 4. keys: H / L stay in the group and wrap
@@ -130,9 +152,9 @@ try {
   check('Alt+Down wraps to t2, with y.html (shown last)', (await cur()) === 'knauf' && (await shown())?.includes('y.html'), await bar());
   await key('ArrowUp', { altKey: true }); await sleep(400);
   check('Alt+Up goes back to t1, with b.html (shown last)', (await cur()) === 'kolektor-etra-2026' && (await shown())?.includes('b.html'), await bar());
-  // a click on the chip
-  await top(`document.querySelector('.chip.other').click(); return 1`); await sleep(400);
-  check('a click on the chip of a group shows it', (await cur()) === 'knauf', await bar());
+  // a click on the row of a group
+  await top(`document.querySelector('.grow:not(.cur)').click(); return 1`); await sleep(400);
+  check('a click on the row of a group shows it', (await cur()) === 'knauf', await bar());
 
   // 5. a PDF in the group "other": Alt+Down works while the PDF viewer has the focus
   run('', z);
@@ -167,7 +189,10 @@ try {
   run('t4', k2, '--live');
   const two = (await groups()).filter(g => g.id === 't2' || g.id === 't4').map(g => g.label).sort().join();
   check('two groups called knauf: the terminal id is added', two === 'knauf t2,knauf t4', two);
-  await fetch(`${base}/api/close?d=${(await api()).tabs.find(t => t.name === 'k.html').id}`, { method: 'POST' });
+  // the × of a tab closes it
+  await until(async () => (await shown()) === 'k.html', 5000);
+  await top(`document.querySelector('.tab.on .x').click(); return 1`);
+  check('the × of a tab closes it', !!(await until(async () => !(await api()).tabs.some(t => t.name === 'k.html'), 5000)));
 
   // 9. a group of another machine: the terminal and the project folder come from there
   procs.push(spawn(jdbin, [r, '--live', '--no-window', '--port', String(RP)], { env: env('t6'), stdio: 'ignore' }));

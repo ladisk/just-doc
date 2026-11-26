@@ -5,41 +5,63 @@
 <title>just-doc</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #525659; font: 12px/22px system-ui, sans-serif; }
-  /* the height of the bars above the pages: one row, or two rows (the sessions, then the pages of one) */
-  body { --bar: 22px; }
-  body.multi { --bar: 44px; }
-  #groups { display: none; height: 22px; background: #1e2023; color: #c9ccd2; user-select: none; overflow: hidden; }
-  body.multi #groups { display: flex; }
-  #tabs { display: flex; height: 22px; background: #2b2d30; color: #a9adb3; user-select: none; position: relative; }
-  /* the colour of the shown session: a line under the row of its pages */
-  #tabs::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--g, transparent); pointer-events: none; }
-  .tab { padding: 0 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
-         border-right: 1px solid #45484d; }
-  /* a group of tabs: the session (hc terminal) that opened them; one chip each in the top row */
-  .chip { flex: none; padding: 0 10px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
-          border-right: 1px solid #45484d; background: #1e2023; color: #c9ccd2; font-weight: 600; }
-  /* each session has its colour: a stripe on its chip; the shown session's chip is filled with it */
-  .chip { box-shadow: inset 4px 0 0 var(--c); padding-left: 12px; }
-  .chip.cur { background: color-mix(in srgb, var(--c) 45%, #2b2d30); color: #fff; }
-  .chip.other:hover { background: #33363a; }
-  .chip small { font-weight: normal; color: #8a8f97; margin-left: 2px; }
-  .chip b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; font-weight: 600; }
-  .chip u { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ffb347; margin-left: 6px; vertical-align: 1px; }
-  .tab.on { background: #525659; color: #fff; }
-  .tab i { font-style: normal; background: #1f8f4e; color: #fff; border-radius: 8px; padding: 0 6px; margin-right: 6px; font-size: 11px; }
+  /* --bar: the height of the row of tabs above the pages; --left: the width of the list of groups at the left */
+  body { --bar: 30px; --left: 0px; --accent: #2f7bff; --strip: #1e1f22; --raised: #2b2d30; }
+  body.rail { --left: 180px; }
+  /* the groups of tabs (a group: the hc terminal that opened them), one row each; only with several groups */
+  #groups { display: none; position: fixed; left: 0; top: 0; bottom: 0; width: var(--left); box-sizing: border-box; z-index: 10;
+            flex-direction: column; background: var(--strip); color: #b4b8bf; border-right: 1px solid #111214;
+            user-select: none; overflow-y: auto; overflow-x: hidden; }
+  body.rail #groups { display: flex; }
+  body.rail.livefoot #groups { bottom: var(--foot, 22px); }
+  #groups h1 { flex: none; height: var(--bar); margin: 0; padding: 0 12px; display: flex; align-items: center; justify-content: space-between;
+               font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #6f747c;
+               border-bottom: 1px solid #111214; box-sizing: border-box; }
+  #groups h1 kbd { text-transform: none; letter-spacing: 0; }
+  .grow { flex: none; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 12px; cursor: pointer;
+          font-size: 12.5px; box-shadow: inset 3px 0 0 transparent; }
+  .grow:hover { background: #26282b; color: #dfe1e5; }
+  .grow.cur { background: var(--raised); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
+  .grow .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grow.cur .nm { font-weight: 600; }
+  .grow small { flex: none; font-size: 11px; color: #6f747c; }
+  .grow .sp { flex: 1; }
+  .grow .n { flex: none; min-width: 12px; text-align: right; font-size: 11px; color: #6f747c; font-variant-numeric: tabular-nums; }
+  .grow.cur .n { color: #9aa0a8; }
+  .grow b, .tab b { flex: none; background: var(--accent); color: #fff; border-radius: 8px; padding: 0 6px; font-size: 10.5px; line-height: 16px; font-weight: 600; }
+  .grow u { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #ffb347; }
+  /* the tabs of the shown group, in one row above the pages */
+  #tabs { display: flex; position: absolute; left: var(--left); right: 0; top: 0; height: var(--bar); background: var(--strip);
+          color: #9a9fa7; user-select: none; box-shadow: inset 0 -1px 0 #111214; }
+  #strip { display: flex; flex: 1; min-width: 0; overflow: hidden; }
+  #where { flex: none; display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #dfe1e5; font-weight: 600; font-size: 12px;
+           box-shadow: inset 3px 0 0 var(--accent), inset -1px 0 0 #111214; }
+  .tab { position: relative; flex: 0 1 auto; min-width: 60px; max-width: 220px; display: flex; align-items: center; gap: 7px;
+         padding: 0 6px 0 14px; font-size: 12.5px; cursor: pointer; }
+  .tab + .tab::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 1px; background: #3a3d42; }
+  .tab.on::before, .tab.on + .tab::before { display: none; }
+  .tab:hover { background: #26282b; color: #dfe1e5; }
+  .tab.on { background: var(--raised); color: #fff; box-shadow: inset 0 2px 0 var(--accent); }
+  .tab .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab i { flex: none; font-style: normal; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+           line-height: 15px; padding: 0 5px; border-radius: 3px; background: rgba(63, 185, 80, .18); color: #56d364; }
   /* a live tab that is not shown: a dot in place of the "live" mark */
-  .tab i.dot { display: inline-block; width: 8px; height: 8px; padding: 0; margin: 0 8px 0 4px; border-radius: 50%; vertical-align: 1px; }
-  .tab b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; }
-  #keys { margin-left: auto; padding: 0 10px; white-space: nowrap; }
-  kbd { font: 11px ui-monospace, monospace; background: #45484d; color: #e8e8e8; border-radius: 3px; padding: 0 4px; }
-  iframe { position: absolute; left: 0; top: var(--bar); width: 100%; height: calc(100% - var(--bar)); border: 0; visibility: hidden; }
+  .tab i.dot { width: 6px; height: 6px; padding: 0; border-radius: 50%; background: #3fb950; }
+  .tab .x { flex: none; width: 16px; height: 16px; line-height: 15px; text-align: center; border-radius: 3px; font-size: 14px;
+            color: #9a9fa7; visibility: hidden; }
+  .tab:hover .x, .tab.on .x { visibility: visible; }
+  .tab .x:hover { background: #45484d; color: #fff; }
+  #keys { flex: none; margin-left: auto; padding: 0 12px; white-space: nowrap; display: flex; align-items: center; gap: 4px;
+          font-size: 11px; color: #6f747c; }
+  kbd { font: 10.5px/15px ui-monospace, monospace; background: #303236; color: #b4b8bf; border-radius: 3px; padding: 0 4px; }
+  iframe { position: absolute; left: var(--left); top: var(--bar); width: calc(100% - var(--left)); height: calc(100% - var(--bar)); border: 0; visibility: hidden; }
   iframe.on { visibility: visible; }
   #toast { position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); z-index: 40; background: #1f7a3a; color: #fff;
            padding: 10px 18px; border-radius: 6px; font-size: 15px; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,.4); display: none; }
   #toast.err { background: #b00020; }
   /* one document needs no tab bar */
   body.one #tabs, body.one #groups { display: none; }
-  body.one { --bar: 0px; }
+  body.one { --bar: 0px; --left: 0px; }
   /* the comments of a live page: a panel at the right, the page narrows to make room */
   #side { position: fixed; right: 0; top: var(--bar); bottom: 0; width: 340px; display: none; flex-direction: column;
           background: #2b2d30; color: #d8dade; border-left: 1px solid #45484d; font-size: 13px; line-height: 1.4; }
@@ -113,7 +135,7 @@
   body.oldview #foot { background: #3b2a5c; }
   body.oldview #fchg { color: #d8c2ff; font-weight: 700; }
   /* the history of the rounds (gh): at the left, over the page */
-  #hist { position: fixed; top: var(--bar); left: 0; bottom: var(--foot, 22px); width: 520px; max-width: 90vw; z-index: 45; display: none;
+  #hist { position: fixed; top: var(--bar); left: var(--left); bottom: var(--foot, 22px); width: 520px; max-width: 90vw; z-index: 45; display: none;
           background: #f4f4f2; color: #222; border-right: 1px solid #999; box-shadow: 4px 0 16px rgba(0,0,0,.4); overflow-y: auto;
           font-size: 13px; line-height: 1.4; }
   #hist.open { display: block; }
@@ -138,7 +160,7 @@
 <div id="groups"></div>
 <div id="tabs"></div>
 <div id="toast"></div>
-<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>Alt</kbd>+<kbd>s</kbd> groups &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
 <div id="help"><div class="card">
   <h2>Keys of a live page — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
@@ -160,7 +182,8 @@
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>hand the comments over to the <code>just-doc --wait</code> that is waiting for them</td></tr>
     <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab of the group; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
-    <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>previous / next group of tabs (the tabs opened from one hc terminal); a click on the chip of a group does the same</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>previous / next group of tabs (the tabs opened from one hc terminal); a click on the group in the list at the left does the same</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>s</kbd></td><td>hide or show the list of groups at the left (shown with several groups); the choice is kept</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>w</kbd></td><td>close the tab</td></tr>
     <tr><td><kbd>q</kbd> <kbd>y</kbd></td><td>stop just-doc and close its windows</td></tr>
     <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
@@ -207,27 +230,41 @@ const done = {};     // document id -> whether the assistant finished its answer
 window.tabNews = (id, n, ready) => { news[id] = n; done[id] = ready; draw(); };
 
 const groupOf = t => t.group || '';
-// the colour of a group comes from its id, so it stays the same while the group lives
-const PALETTE = ['#4e9af1', '#f2a541', '#4fbf7f', '#e0646f', '#b48ead', '#3fb5c4', '#c9b44a', '#7f8cf0'];
-const colourOf = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
 const inGroup = g => tabs.filter(t => groupOf(t) === g);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-function chip(g, cur) {
-  const el = document.createElement('div');
-  el.className = 'chip ' + (cur ? 'cur' : 'other');
-  el.style.setProperty('--c', colourOf(g.id));
-  el.append(g.label);
+// the list of groups at the left (Alt+s hides or shows it); the choice is kept in the browser
+let railHidden = false;
+try { railHidden = localStorage.getItem('jd-rail') === 'hidden'; } catch {}
+function toggleRail() {
+  railHidden = !railHidden;
+  try { localStorage.setItem('jd-rail', railHidden ? 'hidden' : 'shown'); } catch {}
+  draw();
+  LIVE.draw();
+}
+
+// the news of some tabs: the number of new replies, a ✓ when the assistant finished
+function newsOf(list) {
+  const n = list.reduce((sum, t) => sum + (news[t.id] || 0), 0);
+  return n ? el('b', '', (list.some(t => done[t.id]) ? '✓ ' : '') + n) : null;
+}
+
+// one row per group: its name, the machine of a remote group, the news, a dot when a --wait waits
+// or a Ctrl+Enter was not taken, and the number of its tabs
+function groupRow(g, cur) {
+  const row = el('div', 'grow' + (cur ? ' cur' : ''));
+  const prefix = g.machine ? g.machine + ': ' : '';
+  row.append(el('span', 'nm', g.label.startsWith(prefix) ? g.label.slice(prefix.length) : g.label));
+  if (g.machine) row.append(el('small', '', g.machine));
   const mine = inGroup(g.id);
-  const small = document.createElement('small');
-  small.textContent = ' ' + mine.length;
-  el.appendChild(small);
-  // news of its tabs, as on the tabs; a dot when a --wait waits or a Ctrl+Enter was not taken
-  const n = mine.reduce((sum, t) => sum + (news[t.id] || 0), 0);
-  if (n) { const b = document.createElement('b'); b.textContent = (mine.some(t => done[t.id]) ? '✓ ' : '') + n; el.appendChild(b); }
-  if (mine.some(t => t.waiting || t.pending)) el.appendChild(document.createElement('u'));
-  el.title = g.label + ': ' + mine.map(t => t.name).join(', ');
-  el.onclick = () => { if (!cur) showGroup(g.id); };
-  return el;
+  const b = newsOf(mine);
+  row.append(el('span', 'sp'));
+  if (b) row.append(b);
+  if (mine.some(t => t.waiting || t.pending)) row.append(el('u'));
+  row.append(el('span', 'n', mine.length));
+  row.title = g.label + ': ' + mine.map(t => t.name).join(', ');
+  row.onclick = () => { if (!cur) showGroup(g.id); };
+  return row;
 }
 
 function draw() {
@@ -235,28 +272,40 @@ function draw() {
   gbar.textContent = '';
   const cur = tabs.find(t => t.id === active), curId = cur ? groupOf(cur) : (groups[0]?.id ?? '');
   const several = groups.length > 1;
-  // the top row: one chip per group, in the order of the server; the bottom row: the tabs of the shown group
   document.body.classList.toggle('multi', several);
-  bar.style.setProperty('--g', several ? colourOf(curId) : 'transparent');
-  if (several) for (const g of groups) gbar.appendChild(chip(g, g.id === curId));
-  for (const t of several ? inGroup(curId) : tabs) {
-    const el = document.createElement('div');
-    el.className = 'tab' + (t.id === active ? ' on' : '');
-    el.textContent = t.name;
-    // a page shown live, with its scripts running
-    if (t.live) {
-      const i = document.createElement('i');
-      if (t.id === active) i.textContent = 'live'; else i.className = 'dot';
-      el.prepend(i);
-    }
-    if (news[t.id]) { const b = document.createElement('b'); b.textContent = (done[t.id] ? '✓ ' : '') + news[t.id]; el.appendChild(b); }
-    el.title = t.path + (t.live ? ' (live page, loaded again when the file changes)' : '');
-    el.onclick = () => show(t.id);
-    bar.appendChild(el);
+  document.body.classList.toggle('rail', several && !railHidden);
+  if (several) {
+    const h = el('h1', '', 'Groups');
+    const k = el('span'); k.innerHTML = '<kbd>Alt</kbd> <kbd>s</kbd>'; h.append(k);
+    gbar.append(h);
+    for (const g of groups) gbar.appendChild(groupRow(g, g.id === curId));
   }
-  const keys = document.createElement('div');
-  keys.id = 'keys';
-  keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;' + (groups.length > 1 ? '<kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;' : '') + '<kbd>Ctrl</kbd> <kbd>w</kbd> close';
+  const strip = el('div'); strip.id = 'strip';
+  // the list is hidden: the name of the shown group in front of its tabs
+  if (several && railHidden) {
+    const g = groups.find(g => g.id === curId);
+    const w = el('div', '', g?.label ?? ''); w.id = 'where'; strip.append(w);
+  }
+  for (const t of several ? inGroup(curId) : tabs) {
+    const tab = el('div', 'tab' + (t.id === active ? ' on' : ''));
+    // a page shown live, with its scripts running
+    if (t.live) tab.append(t.id === active ? el('i', '', 'live') : el('i', 'dot'));
+    tab.append(el('span', 'nm', t.name));
+    const b = newsOf([t]);
+    if (b) tab.append(b);
+    if (tabs.length > 1) {
+      const x = el('span', 'x', '×');
+      x.title = 'close (Ctrl w)';
+      x.onclick = e => { e.stopPropagation(); fetch('api/close?d=' + t.id, { method: 'POST' }); };
+      tab.append(x);
+    }
+    tab.title = t.path + (t.live ? ' (live page, loaded again when the file changes)' : '');
+    tab.onclick = () => show(t.id);
+    strip.appendChild(tab);
+  }
+  bar.appendChild(strip);
+  const keys = el('div'); keys.id = 'keys';
+  keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;' + (several ? '<kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>Alt</kbd> <kbd>s</kbd> list &nbsp;' : '') + '<kbd>Ctrl</kbd> <kbd>w</kbd> close';
   bar.appendChild(keys);
   // the bar also shows for a single live page, so that its marker is seen
   document.body.classList.toggle('one', tabs.length < 2 && !tabs.some(t => t.live));
@@ -398,7 +447,7 @@ function answers(d) {
 }
 
 // A live page has the keyboard for itself, except for Ctrl+Enter (hand over the comments and
-// answers), the comment keys outside a text field (live.js), Alt+Left / Alt+Right, Ctrl+w, and
+// answers), the comment keys outside a text field (live.js), Alt+arrows, Alt+s, Ctrl+w, and
 // H / L outside a text field; those change or close the tab as in a viewer. A form in it is not
 // sent anywhere.
 function livePage(f, t) {
@@ -409,7 +458,7 @@ function livePage(f, t) {
     if (LIVE.key(e, t.id)) { e.preventDefault(); e.stopPropagation(); return; }
     const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
     const key = !typing && !e.ctrlKey && !e.altKey && (e.key === 'H' || e.key === 'L') ? (e.key === 'H' ? 'ArrowLeft' : 'ArrowRight')
-              : e.altKey && !e.ctrlKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) ? e.key
+              : e.altKey && !e.ctrlKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 's'].includes(e.key) ? e.key
               : e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'w' ? 'w' : '';
     if (key && window.tabKey(key)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
@@ -423,7 +472,7 @@ function showGroup(g) {
   show(mine.find(t => t.id === lastTab[g])?.id || mine[0].id);
 }
 
-// Left / Right change the tab within its group, Up / Down the group, and w closes the tab; the viewers pass their tab keys on as these.
+// Left / Right change the tab within its group, Up / Down the group, s hides or shows the list of groups, and w closes the tab; the viewers pass their tab keys on as these.
 // Returns true when the key was used.
 window.tabKey = key => {
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
@@ -436,6 +485,7 @@ window.tabKey = key => {
     if (groups.length > 1) showGroup(groups[(at + (key === 'ArrowDown' ? 1 : -1) + groups.length) % groups.length].id);
     return true;
   }
+  if (key === 's') { toggleRail(); return true; }
   if (key === 'w' || key === 'W') {
     if (tabs.length > 1) fetch('api/close?d=' + active, { method: 'POST' });
     return true;

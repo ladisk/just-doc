@@ -280,7 +280,8 @@
     <tr><td><kbd>Ctrl</kbd> wheel, <kbd>Ctrl</kbd> <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>zoom around the pointer</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>S</kbd></td><td>export a copy of the PDF with the comments inside</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>S</kbd></td><td>markdown or HTML file: save the PDF made from it next to it, without comments</td></tr>
-    <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab, when several documents are open; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
+    <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab of its group, when several documents are open; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>previous / next group of tabs (the documents that one hc terminal opened)</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>w</kbd></td><td>close the tab; also <kbd>Alt</kbd> <kbd>w</kbd></td></tr>
     <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
     <tr><td><kbd>Esc</kbd></td><td>cancel / deselect</td></tr>
@@ -3161,7 +3162,7 @@ function handleKey(e) {
 }
 
 document.addEventListener('keydown', e => {
-  // Alt+Left / Alt+Right / Alt+w belong to the tabs of the window; Ctrl+w closes the tab too,
+  // Alt+Left / Alt+Right / Alt+Up / Alt+Down / Alt+w belong to the tabs of the window; Ctrl+w closes the tab too,
   // but not while a comment is written
   const tabs = window.parent !== window && window.parent.tabKey;
   const closes = e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'w' && !e.target.matches('textarea, input, select');

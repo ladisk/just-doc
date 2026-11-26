@@ -91,7 +91,8 @@ other `--wait` starts within a few seconds.
 | `Ctrl` + wheel, `Ctrl` `+` / `-` / `0` | zoom the page around the pointer; the toolbar and comment list keep their size |
 | `Ctrl` `S` | export a copy of the PDF with the comments inside |
 | `Ctrl` `Shift` `S` | markdown or HTML file: save the PDF made from it as `notes.pdf` next to it, without comments |
-| `H` / `L` | previous / next tab, when several documents are open; `Alt` `←` / `Alt` `→` do the same |
+| `H` / `L` | previous / next tab of the group, when several documents are open; `Alt` `←` / `Alt` `→` do the same |
+| `Alt` `↑` / `Alt` `↓` | previous / next group of tabs, see below |
 | `Ctrl` `w` | close the tab; `Alt` `w` does the same |
 | `q` then `y` | stop just-doc and close its windows; a `--wait` that is waiting ends too. Closing the window alone leaves just-doc running, and `just-doc` without a file opens the window again |
 | `?` | show or hide the full key list; in it `/` filters the keys by what you type |
@@ -112,6 +113,26 @@ The first `just-doc book.pdf` opens the window. While it runs, every further
 returns at once. `H` and `L` change the tab and `Ctrl+w` closes it; the
 tab bar shows only when more than one document is open. Each tab keeps its
 page, zoom, cursor and search.
+
+#### Groups of tabs
+
+One session of an assistant often opens several documents. The tabs are grouped
+by the hc terminal that opened them (`HC_TERMINAL_ID`, on its machine); documents
+opened without a terminal form the group `other`. The bar shows the tabs of one
+group, with the name of the group in front (`kolektor ▾`), and every other group
+as one chip with its tab count (`knauf ▸ 3`); the chip shows the number of new
+replies of its tabs and an orange dot when a `--wait` waits or a `Ctrl+Enter`
+was not taken yet. With one group there is no chip. A click on a chip, or
+`Alt+Down` / `Alt+Up`, shows that group (its tab shown last). `H` / `L` and
+`Alt+Left` / `Alt+Right` change the tab within the group and wrap. `--hc-terminal`
+and a new document show their own group. A group ends with its last tab.
+
+The name is the project folder of the documents: the folder that has a `.git`
+above the document, otherwise its folder; for several documents the folder they
+share. A group of another machine has the machine in front (`work2: thesis`);
+two groups with the same name get the terminal id after it. `/api/tabs` has
+`group` on every tab and the list `groups` (`id`, `label`, `machine`,
+`terminal`, `count`).
 
 All tabs belong to the first command, so stopping it with `Ctrl+C` closes
 them all. If the window was closed but the command still runs, the next
@@ -755,7 +776,7 @@ comment leaves the list and the page at the next `Ctrl` `Enter`.
 As in the PDF viewer, a bar at the bottom of the window shows the main keys;
 the page and the panel end above it.
 
-`Alt+Left` / `Alt+Right`, `Ctrl+w` and, outside a text field, `H` / `L`
+`Alt+Left` / `Alt+Right`, `Alt+Up` / `Alt+Down` (the group), `Ctrl+w` and, outside a text field, `H` / `L`
 still change or close the tab. All other keys belong to the page.
 
 The comments are kept in `page.live.comments.json` next to the page, with the

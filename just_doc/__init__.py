@@ -54,6 +54,7 @@ import json
 import mimetypes
 import queue
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -70,7 +71,7 @@ import urllib.request
 import webbrowser
 from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = 8700
@@ -921,6 +922,7 @@ class Tabs:
         self.live = set()    # ids of the HTML pages that are shown live, not as a PDF
         self.terms = {}      # id -> the hc terminal (HC_TERMINAL_ID) the document was opened from
         self.opened_at = {}  # id -> when the document was opened last (time.time)
+        self.roots = {}      # id -> the project folder of a local document, see project_root
         self.remote = {}     # id -> a document (live page or PDF) of a just-doc on another machine, see open_remote
         self.forwards = Forwards()
         self.quit = False    # set by the q key: the windows close and just-doc stops
@@ -1151,7 +1153,8 @@ class Tabs:
                 live = info.get("live", True)
                 tab = {"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
                        "live": live, "remote": info["machine"], "rid": info["id"], "rev": info.get("rev", 0), "file": info.get("file"),
-                       "waiting": False, "pending": False}
+                       "waiting": False, "pending": False, "terminal": info.get("terminal"),
+                       "root": info.get("root") or str(PurePosixPath(info["path"]).parent)}
                 if live:
                     tab["src"] = f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}"
                 else:
@@ -1170,12 +1173,17 @@ class Tabs:
             live = key in self.live
             if not live:
                 self.committed(key, doc)
+            if key not in self.roots:
+                self.roots[key] = str(project_root(doc))
             tabs.append({"id": key, "name": doc.name, "path": str(doc), "live": live, "rev": self.rev.get(key, 0),
                          "file": self.stamp[key], "waiting": self.listens(key), "waits": self.waiting.get(key, 0),
                          # a Ctrl+Enter that no --wait has taken yet
-                         "pending": self.handed.get(key, 0) > self.taken.get(key, 0)})
+                         "pending": self.handed.get(key, 0) > self.taken.get(key, 0),
+                         "terminal": self.terms.get(key), "root": self.roots[key]})
+        groups = group_tabs(tabs)
         # build: the window loads itself again when just-doc was updated (restarted with another version)
-        return {"tabs": tabs, "focus": self.focus, "opened": self.opened, "quit": self.quit, "build": VERSION}
+        return {"tabs": tabs, "groups": groups, "focus": self.focus, "opened": self.opened, "quit": self.quit,
+                "build": VERSION}
 
     def committed(self, key, doc):
         """Keep the PDF of a document as it is when a commit is made in its repository."""
@@ -1189,6 +1197,49 @@ class Tabs:
         if at != seen:
             self.logs[key][1] = at
             commit_pdf(doc, log, now=seen is not None)
+
+
+def project_root(path):
+    """Return the project folder of a document: the nearest folder above it with a ``.git``, else its own folder."""
+    path = Path(path)
+    for folder in path.parents:
+        if (folder / ".git").exists():
+            return folder
+    return path.parent
+
+
+def group_tabs(tabs):
+    """Group the tabs of the window by the session that opened them; set ``group`` on each tab.
+
+    A group is the hc terminal that opened its documents, on its machine (``terminal``;
+    ``remote`` is the machine name of a document of another machine). Documents without
+    a terminal form the group "other" of their machine. Return the list of groups in the
+    order of their first tab: ``id`` ("t1", "work2:t3", "other"), ``label``, ``machine``
+    ("" here), ``terminal``, ``count``. The label is the last part of the common folder of
+    the project folders of its documents (the repository folder where there is a ``.git``),
+    with the machine in front for another machine; two equal labels get the terminal id.
+    """
+    groups = {}
+    for tab in tabs:
+        machine, terminal = tab.get("remote") or "", tab.get("terminal") or ""
+        gid = (machine + ":" if machine else "") + (terminal or "other")
+        tab["group"] = gid
+        g = groups.setdefault(gid, {"id": gid, "machine": machine, "terminal": terminal, "count": 0, "roots": []})
+        g["count"] += 1
+        if terminal and tab.get("root"):
+            g["roots"].append(tab["root"])
+    for g in groups.values():
+        name = "other"
+        if g["roots"]:
+            common = posixpath.commonpath(g["roots"]) if len({r.startswith("/") for r in g["roots"]}) == 1 else ""
+            name = posixpath.basename(common.rstrip("/")) or common or "/"
+        g["label"] = f"{g['machine']}: {name}" if g["machine"] else name
+        del g["roots"]
+    labels = [g["label"] for g in groups.values()]
+    for g in groups.values():
+        if labels.count(g["label"]) > 1 and g["terminal"]:
+            g["label"] += f" {g['terminal']}"
+    return list(groups.values())
 
 
 def config():
@@ -1481,7 +1532,7 @@ def make_handler(tabs):
                 if tab is None:
                     self._json(404, {"error": "no document from this terminal"})
                 else:
-                    self._json(200, {k: tab[k] for k in ("id", "name", "path", "live", "file")})
+                    self._json(200, {k: tab[k] for k in ("id", "name", "path", "live", "file", "root")})
             elif route == "/api/events":
                 self._events()
             elif route == "/api/tabs":
@@ -1615,6 +1666,9 @@ def make_handler(tabs):
                     obj = self._body()
                     info = {k: obj[k] for k in ("machine", "port", "id", "name", "path", "file")}
                     info["live"] = bool(obj.get("live", True))
+                    # the hc terminal there and the project folder there, for the group of the tab
+                    info["terminal"] = str(obj["terminal"]) if obj.get("terminal") else None
+                    info["root"] = str(obj["root"]) if obj.get("root") else None
                     # the ssh target comes from the machine name here, never from the request
                     info["target"], info["port"] = machine_target(str(info["machine"]))[0], int(info["port"])
                     tabs.forwards.port(info["target"], info["port"])
@@ -2286,7 +2340,8 @@ def hc_remote(terminal, machine, port, window=True, doc_id=None):
         fail(f"no open document from terminal {terminal} on {machine}")
     url = local_just_doc(port)
     info = {"machine": machine, "port": got["port"], "id": got["id"], "name": got["name"],
-            "path": got["path"], "file": got.get("file"), "live": bool(got.get("live"))}
+            "path": got["path"], "file": got.get("file"), "live": bool(got.get("live")),
+            "terminal": terminal, "root": got.get("root")}
     try:
         state = ask(url + "api/remote", info, timeout=90)
     except (OSError, RuntimeError) as exc:

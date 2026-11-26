@@ -8,6 +8,14 @@
   #tabs { display: flex; height: 22px; background: #2b2d30; color: #a9adb3; user-select: none; }
   .tab { padding: 0 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
          border-right: 1px solid #45484d; }
+  /* a group of tabs: the session (hc terminal) that opened them; the chip of the shown group has its tabs after it */
+  .chip { padding: 0 10px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+          border-right: 1px solid #45484d; background: #1e2023; color: #c9ccd2; font-weight: 600; }
+  .chip.cur { background: #3a3d42; color: #fff; }
+  .chip.other:hover { background: #33363a; }
+  .chip small { font-weight: normal; color: #8a8f97; margin-left: 2px; }
+  .chip b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; font-weight: 600; }
+  .chip u { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ffb347; margin-left: 6px; vertical-align: 1px; }
   .tab.on { background: #525659; color: #fff; }
   .tab i { font-style: normal; background: #1f8f4e; color: #fff; border-radius: 8px; padding: 0 6px; margin-right: 6px; font-size: 11px; }
   /* a live tab that is not shown: a dot in place of the "live" mark */
@@ -123,7 +131,7 @@
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
-<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
 <div id="help"><div class="card">
   <h2>Keys of a live page — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
@@ -144,7 +152,8 @@
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>hand the comments over to the <code>just-doc --wait</code> that is waiting for them</td></tr>
-    <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
+    <tr><td><kbd>H</kbd> / <kbd>L</kbd></td><td>previous / next tab of the group; also <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd></td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>previous / next group of tabs (the tabs opened from one hc terminal); a click on the chip of a group does the same</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>w</kbd></td><td>close the tab</td></tr>
     <tr><td><kbd>q</kbd> <kbd>y</kbd></td><td>stop just-doc and close its windows</td></tr>
     <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
@@ -163,6 +172,8 @@
 const bar = document.getElementById('tabs');
 const frames = {};   // document id -> iframe
 let tabs = [], active = null;
+let groups = [];     // the groups of tabs, from the server: {id, label, count, ...}
+const lastTab = {};  // group id -> the tab of it that was shown last
 const revs = {};     // document id -> the state of its comments that its viewer shows
 const news = {};     // document id -> the number of its comments with a new reply
 const files = {};    // document id -> the state of its file that its viewer shows
@@ -175,6 +186,8 @@ let opened = +(sessionStorage.getItem('opened') || -1);   // the last "open" req
 function show(id) {
   if (!frames[id]) return;
   active = id;
+  const t = tabs.find(t => t.id === id);
+  if (t) lastTab[groupOf(t)] = id;
   sessionStorage.setItem('tab', id);
   for (const k in frames) frames[k].classList.toggle('on', k === id);
   frames[id].contentWindow.focus();
@@ -186,9 +199,36 @@ function show(id) {
 const done = {};     // document id -> whether the assistant finished its answers and waits again
 window.tabNews = (id, n, ready) => { news[id] = n; done[id] = ready; draw(); };
 
+const groupOf = t => t.group || '';
+const inGroup = g => tabs.filter(t => groupOf(t) === g);
+
+function chip(g, cur) {
+  const el = document.createElement('div');
+  el.className = 'chip ' + (cur ? 'cur' : 'other');
+  el.append(g.label);
+  const mine = inGroup(g.id);
+  if (cur) el.append(' ▾');
+  else {
+    const small = document.createElement('small');
+    small.textContent = ' ▸ ' + mine.length;
+    el.appendChild(small);
+    // news of a tab that is not shown, as on the tabs; a dot when a --wait waits or a Ctrl+Enter was not taken
+    const n = mine.reduce((sum, t) => sum + (news[t.id] || 0), 0);
+    if (n) { const b = document.createElement('b'); b.textContent = (mine.some(t => done[t.id]) ? '✓ ' : '') + n; el.appendChild(b); }
+    if (mine.some(t => t.waiting || t.pending)) el.appendChild(document.createElement('u'));
+  }
+  el.title = cur ? 'tabs of this group; Alt+Up / Alt+Down change the group'
+                 : g.label + ': ' + mine.map(t => t.name).join(', ');
+  el.onclick = () => { if (!cur) showGroup(g.id); };
+  return el;
+}
+
 function draw() {
   bar.textContent = '';
-  for (const t of tabs) {
+  const cur = tabs.find(t => t.id === active), curId = cur ? groupOf(cur) : (groups[0]?.id ?? '');
+  const several = groups.length > 1;
+  if (several) bar.appendChild(chip(groups.find(g => g.id === curId) || groups[0], true));
+  for (const t of several ? inGroup(curId) : tabs) {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
@@ -203,9 +243,10 @@ function draw() {
     el.onclick = () => show(t.id);
     bar.appendChild(el);
   }
+  if (several) for (const g of groups) if (g.id !== curId) bar.appendChild(chip(g, false));
   const keys = document.createElement('div');
   keys.id = 'keys';
-  keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Ctrl</kbd> <kbd>w</kbd> close';
+  keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;' + (groups.length > 1 ? '<kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;' : '') + '<kbd>Ctrl</kbd> <kbd>w</kbd> close';
   bar.appendChild(keys);
   // the bar also shows for a single live page, so that its marker is seen
   document.body.classList.toggle('one', tabs.length < 2 && !tabs.some(t => t.live));
@@ -229,7 +270,12 @@ function sync(msg) {
     build = build || msg.build;
   }
   const at = tabs.findIndex(t => t.id === active);
+  // where the shown tab was in its group, in case it is closed
+  const before = tabs[at];
+  const prevGroup = before ? groupOf(before) : null;
+  const prevAt = before ? inGroup(prevGroup).indexOf(before) : 0;
   tabs = msg.tabs;
+  groups = msg.groups || [{ id: '', label: '', count: tabs.length }];
   for (const t of tabs) {
     if (frames[t.id]) continue;
     const f = frames[t.id] = document.createElement('iframe');
@@ -272,8 +318,11 @@ function sync(msg) {
   else {
     // the tab that was shown is closed (or the window was reloaded), or the document that was
     // opened last is closed again: take the tab from before, or a neighbour
+    // (a neighbour in the same group first; the group is gone with its last tab: the one before it)
     const kept = sessionStorage.getItem('tab');
-    show(frames[kept] ? kept : tabs[Math.min(Math.max(at, 0), tabs.length - 1)].id);
+    const near = Math.min(Math.max(at, 0), tabs.length - 1);
+    const same = prevGroup !== null ? tabs.filter(t => groupOf(t) === prevGroup) : [];
+    show(frames[kept] ? kept : same.length ? same[Math.min(Math.max(prevAt, 0), same.length - 1)].id : tabs[near].id);
   }
 }
 
@@ -350,19 +399,30 @@ function livePage(f, t) {
     if (LIVE.key(e, t.id)) { e.preventDefault(); e.stopPropagation(); return; }
     const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
     const key = !typing && !e.ctrlKey && !e.altKey && (e.key === 'H' || e.key === 'L') ? (e.key === 'H' ? 'ArrowLeft' : 'ArrowRight')
-              : e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') ? e.key
+              : e.altKey && !e.ctrlKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) ? e.key
               : e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'w' ? 'w' : '';
     if (key && window.tabKey(key)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
   LIVE.attach(f, t);
 }
 
-// Left / Right change the tab and w closes it; the viewers pass their tab keys on as these.
+// show a group: the tab of it that was shown last, or its first
+function showGroup(g) {
+  const mine = inGroup(g);
+  if (mine.length) show(mine.find(t => t.id === lastTab[g])?.id || mine[0].id);
+}
+
+// Left / Right change the tab within its group, Up / Down the group, and w closes the tab; the viewers pass their tab keys on as these.
 // Returns true when the key was used.
 window.tabKey = key => {
-  const at = tabs.findIndex(t => t.id === active);
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
-    if (tabs.length > 1) show(tabs[(at + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length].id);
+    const cur = tabs.find(t => t.id === active), mine = cur ? inGroup(groupOf(cur)) : tabs, at = mine.indexOf(cur);
+    if (mine.length > 1) show(mine[(at + (key === 'ArrowRight' ? 1 : -1) + mine.length) % mine.length].id);
+    return true;
+  }
+  if (key === 'ArrowUp' || key === 'ArrowDown') {
+    const cur = tabs.find(t => t.id === active), at = groups.findIndex(g => cur && g.id === groupOf(cur));
+    if (groups.length > 1) showGroup(groups[(at + (key === 'ArrowDown' ? 1 : -1) + groups.length) % groups.length].id);
     return true;
   }
   if (key === 'w' || key === 'W') {

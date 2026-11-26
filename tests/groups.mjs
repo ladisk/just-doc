@@ -195,7 +195,7 @@ try {
   check('the × of a tab closes it', !!(await until(async () => !(await api()).tabs.some(t => t.name === 'k.html'), 5000)));
 
   // 9. a group of another machine: the terminal and the project folder come from there
-  procs.push(spawn(jdbin, [r, '--live', '--no-window', '--port', String(RP)], { env: env('t6'), stdio: 'ignore' }));
+  spawnSync(jdbin, [r, '--live', '--no-window', '--port', String(RP)], { env: env('t6'), stdio: 'ignore', timeout: 60000 });
   await until(async () => (await fetch(`http://127.0.0.1:${RP}/api/tabs`)).ok, 15000);
   h = spawnSync(jdbin, ['--hc-terminal', 't6', '--hc-machine', 'work2', '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/usr/bin:/bin', XDG_CONFIG_HOME: conf, XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8', timeout: 60000 });

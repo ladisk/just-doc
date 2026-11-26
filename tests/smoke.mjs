@@ -36,8 +36,8 @@ try {
 
   // 2. server
   try { await fetch(base + '/api/tabs'); console.log(`port ${SP} is in use; set SMOKE_PORT`); process.exit(1); } catch {}
-  const srv = spawn('uv', jd(), { cwd: repo, env, stdio: 'ignore' });
-  procs.push(srv);
+  // the command returns once the document is open in a just-doc that runs in the background
+  spawnSync('uv', jd(), { cwd: repo, env, stdio: 'ignore', timeout: 60000 });
   const tabs = await until(async () => (await fetch(base + '/api/tabs')).json(), 30000);
   if (!tabs) throw new Error('server did not start');
   const docId = JSON.stringify(tabs).match(/"(?:id|d)":\s*"([^"]+)"/)?.[1];
@@ -189,6 +189,8 @@ try {
 } finally {
   try { ws?.close(); } catch {}
   for (const p of procs.reverse()) { try { p.kill('SIGTERM'); } catch {} }
+  // just-doc runs in the background, not as a child of this test
+  for (const p of [SP]) { try { await fetch(`http://127.0.0.1:${p}/api/quit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {} }
   await sleep(500);
   for (const p of procs) { try { if (p.exitCode === null) p.kill('SIGKILL'); } catch {} }
   rmSync(tmp, { recursive: true, force: true });

@@ -51,7 +51,9 @@ try {
   check('opened again: live', await until(() => last() === 'label T1 just-doc=live'), calls());
   await fetch(`${base}/api/quit`, json);
   check('quit: the label is removed', await until(() => last() === 'label T1 just-doc='), calls());
-  check('just-doc stopped', await until(() => srv.exitCode !== null || srv.signalCode !== null, 5000));
+  let stopped = false;
+  for (let i = 0; i < 50 && !stopped; i++) { await sleep(100); try { await fetch(base + '/api/tabs'); } catch { stopped = true; } }
+  check('just-doc stopped', stopped);
 
   // without hc the document opens as before
   const nohc = { ...env, PATH: '/usr/bin:/bin' };

@@ -76,3 +76,14 @@ and 8982, debugging port 9381 (`GROUPS_PORT`, `GROUPS_CDP_PORT`); `SHOTS` is a
 folder for screenshots.
 
     node tests/groups.mjs    # exit code 1 if a check fails
+
+`life.mjs` checks how just-doc starts, stays and comes back: a command with no
+just-doc running returns at once and leaves one in a session of its own; killing
+the process group of a `--wait` that started it, or a `SIGHUP`, leaves it
+running; `SIGTERM` ends it; its tabs are kept in `session-<port>.json`, and
+`just-doc` without a file starts it again with them (a page whose file is gone
+left out), also after `q y`, but not after every tab was closed; an update keeps
+the tabs; `server-<port>.log` has the start, restart, restore and exit lines and
+keeps its last 200. Ports 8984 to 8986 (`LIFE_PORT`).
+
+    node tests/life.mjs      # exit code 1 if a check fails

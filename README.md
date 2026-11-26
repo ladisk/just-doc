@@ -12,7 +12,8 @@ just-doc notes.md          # a markdown file works the same way
 just-doc slides.html       # and an HTML file, such as a slide deck
 just-doc page.html --live  # an HTML page as it is, scripts running, to comment and answer
 just-doc page.html --shot page.png   # a picture of that page, to check it before showing it
-just-doc                   # list the open documents; open the window again if it was closed
+just-doc                   # list the open documents; open the window again if it was closed,
+                           # or start just-doc again with the documents it had
 just-doc book.pdf --wait   # open it, wait for Ctrl+Enter, then print the comments
 just-doc book.pdf --reply 2 "text"   # add a reply to comment 2
 just-doc --hc-terminal t12 # bring the window up with the last document from hc terminal t12
@@ -34,6 +35,32 @@ To try it without installing: `uvx --from git+https://github.com/ladisk/just-doc
 Needs Python 3.9 or newer; the only dependency is `pypdf`, used for the export. The window is a Chromium, Brave or
 Chrome app window if one is installed, otherwise a tab in the default browser.
 
+### Start, stop and the documents kept
+
+One just-doc serves all open documents as tabs of one window. It runs in the
+background: the first `just-doc FILE` starts it as a process of its own (its own
+session, no terminal, and on Linux with systemd its own scope, `systemd-run --user
+--scope`) and returns as soon as the document is open, like every later command,
+which hands its document over as a new tab. Closing the terminal of that command,
+or stopping the process group, service or scope it ran in, leaves just-doc
+running; so does a `SIGHUP`. `SIGTERM` and `q` `y` in the window stop it.
+
+just-doc keeps the list of its tabs in `~/.cache/just-doc/session-<port>.json`
+(written again whenever a tab opens, closes or is selected). A just-doc that
+starts with none running opens these tabs again, so `just-doc` without a file
+brings back the documents of the last one, after `q` `y`, a crash or a restart,
+and `just-doc FILE` adds its document to them. A tab whose file is gone is left
+out; a page of another machine (`--hc-machine`) is kept and reached again through
+ssh when it is shown. Closing every tab empties the list; with an empty list (or
+none), `just-doc` without a file starts nothing and ends with status 1.
+
+Each just-doc writes one line to `~/.cache/just-doc/server-<port>.log` when it
+starts (with the tabs it restored and the ones it left out, and why), when a
+command restarts it for an update, on an error in a request or a thread, on a
+`SIGHUP`, and when it ends (`q y`, stopped for an update, `SIGTERM`, `SIGINT`, an
+error). A `start` line with no `exit` after it means it was killed with no chance
+to write (`SIGKILL`, a crash). The file keeps its last 200 lines.
+
 ### After an update
 
 One just-doc serves all open documents, and it keeps running after just-doc
@@ -42,7 +69,8 @@ was updated. The next `just-doc` command that finds it running another version
 commits counts too) restarts it as the new version on the same port, with the
 same tabs, the hc terminals they came from, the pages of other machines and a
 `Ctrl+Enter` that no `--wait` has taken yet. Comments and answers are on disk
-already. The window stays and loads itself again once nothing is being typed
+already. The tabs go through `session-<port>.json`, so if the new just-doc does
+not start, `just-doc` without a file starts it with them. The window stays and loads itself again once nothing is being typed
 in it; fields filled in on a live page keep it on the old version until `F5`.
 The window of a just-doc older than this behaviour closes, and a new one opens.
 Commands started at the same moment take turns (a lock file in the cache
@@ -95,7 +123,7 @@ other `--wait` starts within a few seconds.
 | `Alt` `↑` / `Alt` `↓` | previous / next group of tabs, see below |
 | `Alt` `s` | hide or show the list of groups at the left of the window; the choice is kept |
 | `Ctrl` `w` | close the tab; `Alt` `w` does the same |
-| `q` then `y` | stop just-doc and close its windows; a `--wait` that is waiting ends too. Closing the window alone leaves just-doc running, and `just-doc` without a file opens the window again |
+| `q` then `y` | stop just-doc and close its windows; a `--wait` that is waiting ends too. The tabs are kept: `just-doc` without a file starts it again with them. Closing the window alone leaves just-doc running, and `just-doc` without a file opens the window again |
 | `?` | show or hide the full key list; in it `/` filters the keys by what you type |
 | `Esc` | deselect |
 
@@ -140,9 +168,8 @@ two groups with the same name get the terminal id after it. `/api/tabs` has
 `group` on every tab and the list `groups` (`id`, `label`, `machine`,
 `terminal`, `count`).
 
-All tabs belong to the first command, so stopping it with `Ctrl+C` closes
-them all. If the window was closed but the command still runs, the next
-`just-doc` opens a new window with the tabs.
+Closing the window leaves just-doc running; the next `just-doc` opens a new
+window with the tabs (see "Start, stop and the documents kept").
 
 ### Cursor and visual selection
 

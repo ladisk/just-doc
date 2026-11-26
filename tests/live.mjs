@@ -89,7 +89,8 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
 
   // 2. server with the live page, from terminal t1
   try { await fetch(base + '/api/tabs'); console.log(`port ${SP} is in use; set LIVE_PORT`); process.exit(1); } catch {}
-  procs.push(spawn('uv', jd(doc, '--live'), { cwd: repo, env: env('t1'), stdio: 'ignore' }));
+  // the command returns once the page is open in a just-doc that runs in the background
+  spawnSync('uv', jd(doc, '--live'), { cwd: repo, env: env('t1'), stdio: 'ignore', timeout: 60000 });
   const tabs = await until(async () => (await fetch(base + '/api/tabs')).json(), 30000);
   if (!tabs) throw new Error('server did not start');
   const tab = tabs.tabs[0];
@@ -527,8 +528,8 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   const rdoc = join(site, 'remote.html');
   writeFileSync(rdoc, page('r1'));
   utimesSync(rdoc, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
-  procs.push(spawn(venv, [rdoc, '--live', '--no-window', '--port', String(RP)],
-    { env: { ...env('t5'), WAYLAND_DISPLAY: '', DISPLAY: '' }, stdio: 'ignore' }));
+  spawnSync(venv, [rdoc, '--live', '--no-window', '--port', String(RP)],
+    { env: { ...env('t5'), WAYLAND_DISPLAY: '', DISPLAY: '' }, stdio: 'ignore', timeout: 60000 });
   await until(async () => (await fetch(`http://127.0.0.1:${RP}/api/tabs`)).ok, 15000);
   const pr = spawnSync(venv, ['--hc-terminal', 't5', '--print', '--port', String(RP)], { encoding: 'utf8' });
   const printed = (() => { try { return JSON.parse(pr.stdout); } catch { return null; } })();
@@ -696,6 +697,8 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
 } finally {
   try { ws?.close(); } catch {}
   for (const p of procs.reverse()) { try { p.kill('SIGTERM'); } catch {} }
+  // just-doc runs in the background, not as a child of this test
+  for (const p of [SP, SP + 1]) { try { await fetch(`http://127.0.0.1:${p}/api/quit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {} }
   await sleep(500);
   for (const p of procs) { try { if (p.exitCode === null) p.kill('SIGKILL'); } catch {} }
   rmSync(tmp, { recursive: true, force: true });

@@ -66,7 +66,7 @@ do-nothing `hc` on the PATH.
 
 `groups.mjs` checks the groups of tabs: documents opened from two hc terminals
 (`HC_TERMINAL_ID`) in two folders make two groups with the label of the
-repository or folder, one chip per other group and none for one group; `H` / `L`
+repository or folder, one chip per group in a top row and no top row for one group; `H` / `L`
 stay in the group and wrap, `Alt+Down` / `Alt+Up` change the group while a live
 page or a PDF viewer has the focus, a click on a chip too; `--hc-terminal` and
 a new document show their group; the last tab closed drops the group; two equal

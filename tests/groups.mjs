@@ -82,8 +82,11 @@ try {
   };
   // the tab bar as text: chips and tabs
   // the label of the shown group (its chip stays in place; the groups keep their order)
-  const cur = () => top(`return document.querySelector('#tabs .chip.cur')?.childNodes[0].textContent ?? null`);
-  const bar = () => top(`return [...document.querySelectorAll('#tabs > div')].filter(e => e.id !== 'keys').map(e => (e.classList.contains('chip') ? '[' : '') + [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/ ▾$/, '').trim() + (e.querySelector('small') ? e.querySelector('small').textContent : '') + (e.classList.contains('chip') ? ']' : '')).join('|')`);
+  const cur = () => top(`return document.querySelector('#groups .chip.cur')?.childNodes[0].textContent ?? null`);
+  // the two rows as text: [label count] for the groups, then | and the tabs of the shown group
+  const bar = () => top(`const g = [...document.querySelectorAll('#groups .chip')].map(e => '[' + e.childNodes[0].textContent + e.querySelector('small').textContent + ']').join('');
+    const t = [...document.querySelectorAll('#tabs > div')].filter(e => e.id !== 'keys').map(e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()).join('|');
+    return g + '/' + t`);
   const shown = () => top(`return [...(document.querySelector('.tab.on')?.childNodes || [])].filter(n => n.nodeType === 3).map(n => n.textContent).join('')`);
   // a key in the shown frame, as the viewer or the live page gets it
   const key = (k, mods = {}) => top(`const f = document.querySelector('iframe.on'); const w = f.contentWindow, d = w.document;
@@ -91,7 +94,7 @@ try {
   const groups = async () => (await api()).groups;
   const label = async gid => (await groups()).find(g => g.id === gid)?.label;
 
-  check('one group: the bar has no chip', !!(await until(async () => (await bar()) === 'a.html', 10000)), await bar());
+  check('one group: no top row', !!(await until(async () => (await bar()) === '/a.html', 10000)), await bar());
 
   // 3. two terminals, two folders
   run('t1', b, '--live'); run('t2', x, '--live'); run('t2', y, '--live');
@@ -100,8 +103,14 @@ try {
   check('label of t1: the repository folder, not the subfolder of a.html', await label('t1') === 'kolektor-etra-2026', await label('t1'));
   check('label of t2: the folder of its pages', await label('t2') === 'knauf', await label('t2'));
   check('every tab names its group, the old fields stay', st.tabs.every(t => t.group && t.id && t.name && t.path && 'live' in t && 'rev' in t), JSON.stringify(st.tabs[0]));
-  check('the bar: chip of the shown group, its tabs, one chip for the other',
-    !!(await until(async () => (await bar()) === '[kolektor-etra-2026 ▸ 2]|[knauf]|x.html|y.html', 8000)), await bar());
+  check('the rows: a chip per group in order, the tabs of the shown group only',
+    !!(await until(async () => (await bar()) === '[kolektor-etra-2026 2][knauf 2]/x.html|y.html', 8000)), await bar());
+  const geo = () => top(`const r = s => document.querySelector(s)?.getBoundingClientRect(), g = r('#groups'), t = r('#tabs'), f = r('iframe.on');
+    return [g.height, t.top, f.top, getComputedStyle(document.querySelector('#tabs'), '::after').backgroundColor, getComputedStyle(document.querySelector('.chip.cur')).getPropertyValue('--c')].join()`);
+  const gv = (await geo()).split(',');
+  check('two rows: groups 22px, tabs below it, pages from 44px', gv[0] === '22' && gv[1] === '22' && gv[2] === '44', await geo());
+  check('every group has its own colour, one chip is the shown one',
+    !!(await top(`const c = [...document.querySelectorAll('#groups .chip')].map(e => e.style.getPropertyValue('--c')); return new Set(c).size === c.length && document.querySelectorAll('#groups .chip.cur').length === 1`)));
   check('the new document is shown (group t2, y.html)', await shown() === 'y.html' || (await shown())?.includes('y.html'), await shown());
 
   // 4. keys: H / L stay in the group and wrap
@@ -137,6 +146,7 @@ try {
   check('Alt+Up in a live tab goes back to "other"', (await cur()) === 'other' && !!(await top(`return document.querySelector('iframe.on').src.includes('view?d=${pdf?.id}')`)), await bar());
   await key('ArrowUp', { altKey: true }); await sleep(400);
   check('Alt+Up from a PDF tab goes to the previous group', (await cur()) === 'knauf', await bar());
+  check('no name flash in the middle of the window', !(await top(`return !!document.getElementById('gname')`)));
   await shot('groups-four.png');
 
   // 6. --hc-terminal activates the group
@@ -166,7 +176,7 @@ try {
     { env: { HOME: process.env.HOME, PATH: '/usr/bin:/bin', XDG_CONFIG_HOME: conf, XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8', timeout: 60000 });
   check('--hc-machine opens the remote page', h.status === 0, h.stderr || h.stdout);
   check('the remote group is "work2: thesis" (its repository folder)', await label('work2:t6') === 'work2: thesis', JSON.stringify(await groups()));
-  check('the remote group is the shown one', !!(await until(async () => (await cur()) === 'work2: thesis' && (await bar()).includes('[work2: thesis]|work2: r.html'), 5000)), await bar());
+  check('the remote group is the shown one', !!(await until(async () => (await cur()) === 'work2: thesis' && (await bar()).endsWith('/work2: r.html'), 5000)), await bar());
   await sleep(1500);
   await shot('groups-three.png');
 
@@ -175,7 +185,7 @@ try {
   const rs = spawnSync(jdbin, [b, '--live', '--port', String(SP), '--no-window'], { env: env('t1'), encoding: 'utf8', timeout: 60000 });
   const after = await until(async () => { const g = JSON.stringify((await groups()).map(g => [g.id, g.label, g.count])); return g === before && g; }, 20000);
   check('after a restart (update) the groups are the same', !!after, `${rs.stdout}${rs.stderr} ${before} ${JSON.stringify(await groups())}`);
-  check('the window shows them again', !!(await until(async () => (await bar()).includes('[knauf ▸ 2]') && (await bar()).includes('[work2: thesis ▸ 1]'), 15000)), await bar());
+  check('the window shows them again', !!(await until(async () => (await bar()).includes('[knauf 2]') && (await bar()).includes('[work2: thesis 1]'), 15000)), await bar());
   check('no uncaught exceptions', excs.length === 0, excs[0]);
 } catch (e) {
   check('test run', false, e.stack || String(e));

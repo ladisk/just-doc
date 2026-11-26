@@ -655,16 +655,25 @@ A live page is commented as a PDF is, and its plots and models keep working.
 Select text and press `a`, or point at an element with the mouse (a plot, a
 figure, a table) and press `a`. The comments are listed in a panel at the
 right of the window; the page narrows to make room and keeps its own layout.
-On the page they are marked over it: selected text is highlighted, an element
-is outlined, with a dot where the mouse was and its number `#n`.
+On the page they are marked over it in the colours of the PDF viewer: selected
+text is yellow (orange with a comment), an element is outlined in orange with a
+dot where the mouse was, the selected comment has a red frame and the other
+marks step back. A card beside the selected mark (under it when there is no
+room) shows your comment, the last replies and the keys; `a` writes in it. The
+list has the rows, the status words (`new reply`, `answered`, `done ✓`, `not
+handed over`, `not seen yet`, `seen 10:31, no reply`) and the folding of the
+PDF viewer. A new reply stays blue until the comment is selected; a done
+comment leaves the list and the page at the next `Ctrl` `Enter`.
 
 | key (outside a text field) | action |
 |---|---|
 | `a` | comment on the selected text, or on the element under the mouse; on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply |
 | `Enter` / `Shift` `Enter` / `Esc` | in the comment field: save / new line / cancel |
 | `x` | mark the selected comment done; again opens it |
-| `za` | open or close the row of the selected comment in the list |
-| `n` / `p` | select the next / previous comment and scroll the page to it; a click on a row or a `#n` mark does the same |
+| `za` / `zR` / `zM` | open or close the row of the selected comment in the list / open all rows / close all rows |
+| `D` | show or hide the comments that are done and filed (they left the list at a `Ctrl` `Enter`) |
+| `C` | hide or show the marks on the page; the selected comment stays marked |
+| `n` / `p` | select the next / previous comment in the list (page order) and scroll the page to it; a click on a row or on a mark does the same |
 | `d` / `u` | delete the selected comment / undo the delete |
 | `c` | hide or show the comment panel |
 | `Esc` | unselect the comment |
@@ -705,6 +714,9 @@ list, marked `detached`, and is never dropped. So give sections, figures and
 plots an `id`, and where it helps `data-src="plots.py:120"` for the code that
 makes them; then a comment stays in place when the page is rewritten, and the
 assistant knows where to change it.
+
+A live page has no PDF file to compare: the hand-over times (`/api/rounds`) are
+those of its `Ctrl` `Enter` presses, kept in `page.answers.json`.
 
 `--live --wait` and `--live --read` print the comments as `--wait` and
 `--read` do for a PDF, with the anchor in place of the page:

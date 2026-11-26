@@ -38,6 +38,7 @@ Usage
                                  commands above to review a document with you
 """
 import argparse
+import calendar
 import contextlib
 import fcntl
 import functools
@@ -387,6 +388,17 @@ def load_answers(doc):
         return json.loads(answers_path(doc).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"source": doc.name, "rounds": []}
+
+
+def live_rounds(doc):
+    """Return the times of the Ctrl+Enter presses in the live page ``doc``, one per round, in seconds since 1970."""
+    out = []
+    for r in load_answers(doc)["rounds"]:
+        try:
+            out.append(calendar.timegm(time.strptime(r["at"][:19], "%Y-%m-%dT%H:%M:%S")) + int(r["at"][20:23]) / 1000)
+        except (KeyError, ValueError):
+            pass
+    return out
 
 
 def save_answers(doc, answers):
@@ -1378,7 +1390,7 @@ def make_handler(tabs):
                 else:
                     self._send(200, old.read_bytes(), "application/pdf")
             elif route == "/api/rounds":
-                self._json(200, {"rounds": rounds(doc)})
+                self._json(200, {"rounds": live_rounds(doc) if key in tabs.live else rounds(doc)})
             elif route == "/api/info":
                 self._json(200, {"name": doc.name, "path": str(doc), "file": doc.stat().st_mtime})
             elif route == "/api/annotations":

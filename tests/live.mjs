@@ -185,12 +185,12 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   await sleep(300);
   check('a form in the page is not sent', (await ev(`return w.marker`)) === 2);
 
-  // comments: a with selected text, a with the mouse on the plot; the editor is in the side panel of the window
+  // comments: a with selected text, a with the mouse on the plot; the editor is in the card beside the mark
   const press = k => ev(`d.body.dispatchEvent(new w.KeyboardEvent('keydown', {key: '${k}', bubbles: true})); return 1`);
   const typeIn = async text => {
-    const ok = await until(() => top(`return !!document.getElementById('ed')`), 3000);
-    await top(`const e = document.getElementById('ed'); e.value = ${JSON.stringify(text)};
-      e.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); return 1`);
+    const ok = await until(() => ev(`return !!d.getElementById('ed')`), 3000);
+    await ev(`const e = d.getElementById('ed'); e.value = ${JSON.stringify(text)}; e.dispatchEvent(new w.Event('input'));
+      e.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); return 1`);
     return !!ok;
   };
   const stored = (f = join(site, 'page.live.comments.json')) => { try { return JSON.parse(readFileSync(f, 'utf8')).annots; } catch { return []; } };
@@ -198,8 +198,10 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
     w.getSelection().removeAllRanges(); w.getSelection().addRange(r); return 1`);
   await select('intro', 4, 15);
   await press('a');
-  check('a with selected text opens the editor in the side panel', await typeIn('too informal')
+  check('a with selected text opens the editor in a card on the page, the list in the side panel', await typeIn('too informal')
     && await top(`return getComputedStyle(document.getElementById('side')).display === 'flex'`));
+  check('the card is in the marks layer of the page, not in the panel', !!(await until(() => ev(`return !!d.querySelector('#__jd_marks #__jd_card .card')`), 3000))
+    && !(await top(`return !!document.querySelector('#side textarea')`)));
   const c1 = await until(() => stored().find(a => a.n === 1), 5000);
   check('a text comment is saved next to the page with its anchor', c1?.kind === 'text' && c1.text === 'quick brown' && c1.comment === 'too informal'
     && c1.anchor?.id === 'intro' && c1.anchor.prefix.endsWith('The ') && c1.anchor.suffix.startsWith(' fox') && !!c1.anchor.selector, JSON.stringify(c1));
@@ -258,8 +260,25 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   // a reply from the agent shows in the panel
   const rp = run('t1', doc, '--live', '--reply', '1', 'made it formal', '--from', 'bot');
   check('--live --reply succeeds', rp.status === 0, rp.stdout + rp.stderr);
-  check('the panel shows comment 1 as answered', !!(await until(() => top(
-    `return document.querySelector('.it[data-id="${c1.id}"] .st')?.textContent === 'answered'`), 8000)));
+  const pillOf = id => top(`return document.querySelector('.it[data-id="${id}"] .st')?.textContent`);
+  check('the panel shows comment 1 as a new reply, in blue', !!(await until(async () => (await pillOf(c1.id)) === 'new reply'
+    && await top(`return document.querySelector('.it[data-id="${c1.id}"]').classList.contains('new')`), 8000)));
+  await top(`document.querySelector('.it[data-id="${c1.id}"]').click(); return 1`);
+  check('selecting it makes it answered, no longer new', await pillOf(c1.id) === 'answered'
+    && !(await top(`return document.querySelector('.it[data-id="${c1.id}"]').classList.contains('new')`)));
+  check('a comment handed over and read by the assistant, with no reply, says when', /^seen \d\d:\d\d, no reply$/.test(await pillOf(c2.id)), await pillOf(c2.id));
+  const open = () => top(`return [...document.querySelectorAll('.it')].map(r => r.classList.contains('open'))`);
+  await press('z'); await press('R');
+  check('zR opens all rows', (await open()).every(Boolean) && (await open()).length === 2);
+  await press('z'); await press('M');
+  check('zM closes all rows, also the selected one', (await open()).every(x => !x));
+  await press('z'); await press('a');
+  check('za opens the selected row', JSON.stringify(await open()) === '[true,false]');
+  check('the card of the selected comment shows its reply', await ev(`return /bot replied/.test(d.querySelector('#__jd_card .card')?.textContent) && /made it formal/.test(d.querySelector('#__jd_card .card').textContent)`));
+  await press('C');
+  check('C hides the marks, the selected one stays', await ev(`const m = [...d.querySelectorAll('#__jd_hl .m')]; return m.length > 0 && m.every(x => x.classList.contains('on'))`));
+  await press('C');
+  check('C shows them again', await ev(`return d.querySelectorAll('#__jd_hl [data-id]').length === 2`));
 
   // the page changes: new text before the paragraph (also with the quote in it), the plot removed
   await ev(`w.marker = 3; return 1`);
@@ -268,13 +287,29 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('page loads again', !!(await until(() => ev(`return !w.marker && !d.getElementById('plot') && !!d.querySelector('section')`), 15000)));
   const where1 = await until(() => ev(`const m = d.querySelector('#__jd_marks [data-id="${c1.id}"]'); if (!m) return null;
     const p = d.getElementById('intro').getBoundingClientRect(), b = m.getBoundingClientRect();
-    return Math.abs(b.top + 18 - p.top) < 12`), 5000);
+    return Math.abs(b.top - p.top) < 12`), 5000);
   check('the text comment stays on its paragraph (by id), not on the same words elsewhere', !!where1);
   const det = await until(() => stored().find(a => a.n === 2)?.detached === true, 5000);
   check('the comment on the removed plot is kept as detached', !!det && stored().length === 2, JSON.stringify(stored()));
-  check('the panel lists it as detached', !!(await until(() => top(`return document.querySelector('.it[data-id="${c2.id}"] .st')?.textContent === 'detached'`), 3000)));
+  check('the panel lists it as not found on the page', !!(await until(() => top(`return /not found on the page/.test(document.querySelector('.it[data-id="${c2.id}"] .l1')?.textContent)`), 3000)));
   rd = run('t1', doc, '--live', '--read');
   check('--live --read says it is detached', /\(detached/.test(rd.stdout), rd.stdout);
+  // x marks the selected comment done; it leaves the list at the next Ctrl+Enter, D shows it again
+  await ev(`d.getElementById('intro').scrollIntoView(); return 1`);
+  await top(`document.querySelector('.it[data-id="${c1.id}"]').click(); return 1`);
+  await press('x');
+  check('x marks it done (done ✓), at once and not as news', !!(await until(async () => (await pillOf(c1.id)) === 'done ✓', 5000)));
+  await press('Escape');
+  const rowsNow = () => top(`return document.querySelectorAll('.it').length`);
+  check('a done comment stays in the list until the next Ctrl+Enter', (await rowsNow()) === 2);
+  await ev(`d.body.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
+  check('Ctrl+Enter files it: it leaves the list and the page', !!(await until(async () => (await rowsNow()) === 1, 5000))
+    && /1 done . D shows them/.test(await top(`return document.getElementById('archive').textContent`))
+    && await ev(`return d.querySelectorAll('#__jd_hl [data-id]').length === 0`), `${await rowsNow()} ${await top(`return document.getElementById('toast').textContent + document.getElementById('archive').textContent`)}`);
+  await press('D');
+  check('D shows the done comment in the list again, as in the PDF viewer not on the page', (await rowsNow()) === 2 && await top(`return document.querySelector('.it.done .st')?.textContent === 'done ✓'`));
+  await press('D');
+  check('D hides it again', (await rowsNow()) === 1);
 
   // --shot: a picture of the page as it looks live, without the window
   const png = join(tmp, 'shot.png');
@@ -362,7 +397,7 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('a comment on a remote page is saved there, with its anchor', rc?.anchor?.id === 'intro' && rc.text === 'quick' && rc.n === 1, `${typed} ${why} ${JSON.stringify(rc)}`);
   const rrp = spawnSync(venv, [rdoc, '--live', '--reply', '1', 'seen remotely', '--from', 'bot', '--port', String(RP)], { encoding: 'utf8' });
   check('a reply on the remote machine reaches the panel here', rrp.status === 0 && !!(await until(() => top(
-    `return document.querySelector('.it[data-id="${rc?.id}"] .st')?.textContent === 'answered'`), 10000)), rrp.stdout + rrp.stderr);
+    `return document.querySelector('.it[data-id="${rc?.id}"] .st')?.textContent === 'new reply'`), 10000)), rrp.stdout + rrp.stderr);
   check('the remote comment is marked in the page', !!(await until(() => ev(`return d.querySelectorAll('#__jd_marks [data-id]').length === 1`), 3000)));
   // answers of a remote page are kept on its machine and read there
   await ev(`d.querySelector('input[name=note]').value = 'from afar'; d.body.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);

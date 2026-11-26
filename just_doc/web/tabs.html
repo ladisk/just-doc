@@ -50,37 +50,55 @@
   #help td { padding: 3px 16px 3px 0; vertical-align: top; }
   #help td:first-child { white-space: nowrap; color: #555; }
   #help kbd { background: #ddd; border: 1px solid #bbb; border-radius: 3px; padding: 0 5px; font: inherit; color: #222; }
-  #list { flex: 1; overflow-y: auto; padding: 6px; }
-  .none { color: #a9adb3; padding: 8px; }
-  .it { background: #35383c; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; cursor: pointer; border-left: 3px solid transparent; }
-  .it.on { border-left-color: #ff9900; background: #3d4045; }
+  /* the comment list of a live page: the look of the list in the PDF viewer (index.html) */
+  #side { background: #f4f4f2; color: #222; border-left: 1px solid #999; font-size: 12px; line-height: 1.35; }
+  #side h1 { font-size: 12px; margin: 0; padding: 5px 10px; background: #e4e4e0; flex: none; }
+  #side h1 small { font-weight: normal; color: #666; }
+  #list { flex: 1; overflow-y: auto; }
+  .none { color: #888; padding: 8px 10px; }
+  .it { padding: 5px 10px; border-bottom: 1px solid #ddd; cursor: pointer; }
+  .it:hover { background: #eaeae6; }
+  .it.on { background: #ffe9e0; box-shadow: inset 4px 0 0 #d00000; outline: 2px solid #d00000; outline-offset: -2px; }
+  .it.new { background: #e3edff; box-shadow: inset 3px 0 0 #2f7bff; }
+  .it.new.on { background: #ffe9e0; box-shadow: inset 4px 0 0 #d00000; }
+  .it .l1 { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; color: #777; font-size: 11px; }
+  .it .l1 .qq { overflow: hidden; text-overflow: ellipsis; min-width: 0; color: #555; font-style: italic; font-size: 12px; }
+  .it .l1 .wh { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: none; max-width: 45%; }
+  .st { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 700; background: #e4e4e0; color: #666; white-space: nowrap; }
+  .st.new { background: #2f7bff; color: #fff; }
+  .st.read { background: #dbe7ff; color: #0050d0; }
+  .st.wait { background: #ffe0b0; color: #7a4300; }
+  .st.skip { background: #f6cccc; color: #8a1c1c; }
+  .st.done { background: #c9f2c9; color: #14601f; }
+  .it .l2 { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it .l2 b { color: #0050d0; }
+  .it .l2.me b { color: #777; }
+  .it:not(.open) .q, .it:not(.open) .c, .it:not(.open) .r, .it.open .l2, .it.open .qq { display: none; }
+  .it .q { color: #555; font-style: italic; display: -webkit-box; -webkit-line-clamp: 3;
+           -webkit-box-orient: vertical; overflow: hidden; }
+  .it .c { margin-top: 2px; white-space: pre-wrap; font-weight: 600; }
+  .it .c.none { color: #aaa; font-weight: normal; }
   .it.done { opacity: .55; }
-  .it .h { display: flex; gap: 6px; align-items: center; font-size: 12px; }
-  .it .wh { color: #a9adb3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px ui-monospace, monospace; }
-  .st { border-radius: 8px; padding: 0 6px; font-size: 11px; color: #fff; }
-  .st.open { background: #c77700; } .st.answered { background: #2f7bff; } .st.done { background: #3c8f55; } .st.detached { background: #b00020; }
-  .it .q { color: #a9adb3; font-style: italic; margin-top: 3px; }
-  .it .c { margin-top: 3px; white-space: pre-wrap; }
-  .it .one { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .it .r { margin: 4px 0 0 10px; padding-left: 6px; border-left: 2px solid #2f7bff; white-space: pre-wrap; }
-  .it .r.me { border-left-color: #ff9900; }
-  .it .r i { color: #a9adb3; font-style: normal; font-size: 11px; }
-  #ed { width: 100%; box-sizing: border-box; margin-top: 6px; background: #1e1f22; color: #e8e8e8; border: 1px solid #2f7bff;
-        border-radius: 4px; font: 13px/1.4 system-ui, sans-serif; resize: vertical; }
+  .it.old { opacity: .4; }
+  .it .r { margin: 3px 0 0 4px; padding-left: 6px; border-left: 2px solid #0050d0; white-space: pre-wrap; }
+  .it .r b { color: #0050d0; }
+  .it .r.mine { border-left-color: #999; font-weight: 600; }
 </style>
 </head>
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
-<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="help"><div class="card">
   <h2>Keys of a live page — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
   <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
   <table>
     <tr><td><kbd>a</kbd></td><td>comment on the selected text or on the element under the pointer; on a selected comment: reply</td></tr>
-    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous comment</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous comment in the list; done ones are skipped unless <kbd>D</kbd> shows them</td></tr>
     <tr><td><kbd>x</kbd></td><td>mark the comment done; <kbd>x</kbd> again opens it</td></tr>
-    <tr><td><kbd>za</kbd></td><td>open or close the comment in the list</td></tr>
+    <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
+    <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
+    <tr><td><kbd>C</kbd></td><td>hide or show the marks on the page; the selected comment stays marked</td></tr>
     <tr><td><kbd>d</kbd></td><td>delete the selected comment</td></tr>
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
@@ -90,6 +108,10 @@
     <tr><td><kbd>q</kbd> <kbd>y</kbd></td><td>stop just-doc and close its windows</td></tr>
     <tr><td><kbd>?</kbd></td><td>show or hide this list</td></tr>
     <tr><td><kbd>Esc</kbd></td><td>deselect the comment</td></tr>
+    <tr><td><span class="st new">new reply</span></td><td>the assistant answered or marked it done; it stays blue until you select it</td></tr>
+    <tr><td><span class="st read">answered</span> <span class="st done">done ✓</span></td><td>answered and looked at; done by the assistant or by you (<kbd>x</kbd>), it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
+    <tr><td><span class="st">not handed over</span></td><td>you wrote it since the last <kbd>Ctrl</kbd> <kbd>Enter</kbd></td></tr>
+    <tr><td><span class="st wait">not seen yet</span> <span class="st skip">seen 10:31, no reply</span></td><td>handed over; the assistant has not read it yet, or read it and left it without a reply</td></tr>
   </table>
 </div></div>
 <script src="live.js"></script>

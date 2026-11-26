@@ -122,8 +122,11 @@ opened without a terminal form the group `other`. The bar shows the tabs of one
 group, with the name of the group in front (`kolektor ▾`), and every other group
 as one chip with its tab count (`knauf ▸ 3`); the chip shows the number of new
 replies of its tabs and an orange dot when a `--wait` waits or a `Ctrl+Enter`
-was not taken yet. With one group there is no chip. A click on a chip, or
-`Alt+Down` / `Alt+Up`, shows that group (its tab shown last). `H` / `L` and
+was not taken yet. The groups keep their order; the shown one opens in place,
+its tabs after its chip. Each group has a colour: a stripe on its chip, and a
+line under the bar in the colour of the shown group. With one group there is no
+chip. A click on a chip, or `Alt+Down` / `Alt+Up`, shows that group (its tab
+shown last), and its name shows for a moment in the middle of the window. `H` / `L` and
 `Alt+Left` / `Alt+Right` change the tab within the group and wrap. `--hc-terminal`
 and a new document show their own group. A group ends with its last tab.
 

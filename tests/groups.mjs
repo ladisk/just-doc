@@ -81,6 +81,8 @@ try {
     writeFileSync(join(process.env.SHOTS, name), Buffer.from(g.data, 'base64'));
   };
   // the tab bar as text: chips and tabs
+  // the label of the shown group (its chip stays in place; the groups keep their order)
+  const cur = () => top(`return document.querySelector('#tabs .chip.cur')?.childNodes[0].textContent ?? null`);
   const bar = () => top(`return [...document.querySelectorAll('#tabs > div')].filter(e => e.id !== 'keys').map(e => (e.classList.contains('chip') ? '[' : '') + [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/ ▾$/, '').trim() + (e.querySelector('small') ? e.querySelector('small').textContent : '') + (e.classList.contains('chip') ? ']' : '')).join('|')`);
   const shown = () => top(`return [...(document.querySelector('.tab.on')?.childNodes || [])].filter(n => n.nodeType === 3).map(n => n.textContent).join('')`);
   // a key in the shown frame, as the viewer or the live page gets it
@@ -99,7 +101,7 @@ try {
   check('label of t2: the folder of its pages', await label('t2') === 'knauf', await label('t2'));
   check('every tab names its group, the old fields stay', st.tabs.every(t => t.group && t.id && t.name && t.path && 'live' in t && 'rev' in t), JSON.stringify(st.tabs[0]));
   check('the bar: chip of the shown group, its tabs, one chip for the other',
-    !!(await until(async () => (await bar()) === '[knauf]|x.html|y.html|[kolektor-etra-2026 ▸ 2]', 8000)), await bar());
+    !!(await until(async () => (await bar()) === '[kolektor-etra-2026 ▸ 2]|[knauf]|x.html|y.html', 8000)), await bar());
   check('the new document is shown (group t2, y.html)', await shown() === 'y.html' || (await shown())?.includes('y.html'), await shown());
 
   // 4. keys: H / L stay in the group and wrap
@@ -113,15 +115,15 @@ try {
   check('Alt+Right stays in the group', (await shown())?.includes('y.html'));
   // Alt+Down: the other group, its tab shown last
   await key('ArrowDown', { altKey: true }); await sleep(400);
-  check('Alt+Down shows the group t1 and its first tab', (await bar()).startsWith('[kolektor-etra-2026') && (await shown())?.includes('a.html'), await bar() + ' ' + await shown());
+  check('Alt+Down shows the group t1 and its first tab', (await cur()) === 'kolektor-etra-2026' && (await shown())?.includes('a.html'), await bar() + ' ' + await shown());
   await key('L'); await sleep(300);
   await key('ArrowDown', { altKey: true }); await sleep(400);
-  check('Alt+Down wraps to t2, with y.html (shown last)', (await bar()).startsWith('[knauf]') && (await shown())?.includes('y.html'), await bar());
+  check('Alt+Down wraps to t2, with y.html (shown last)', (await cur()) === 'knauf' && (await shown())?.includes('y.html'), await bar());
   await key('ArrowUp', { altKey: true }); await sleep(400);
-  check('Alt+Up goes back to t1, with b.html (shown last)', (await bar()).startsWith('[kolektor-etra-2026]') && (await shown())?.includes('b.html'), await bar());
+  check('Alt+Up goes back to t1, with b.html (shown last)', (await cur()) === 'kolektor-etra-2026' && (await shown())?.includes('b.html'), await bar());
   // a click on the chip
   await top(`document.querySelector('.chip.other').click(); return 1`); await sleep(400);
-  check('a click on the chip of a group shows it', (await bar()).startsWith('[knauf]'), await bar());
+  check('a click on the chip of a group shows it', (await cur()) === 'knauf', await bar());
 
   // 5. a PDF in the group "other": Alt+Down works while the PDF viewer has the focus
   run('', z);
@@ -130,22 +132,22 @@ try {
   check('the viewer of the PDF is shown', !!(await until(() => top(`const f = document.querySelector('iframe.on'); return f?.src.includes('view?d=${pdf?.id}') && !!f.contentDocument?.getElementById('foot')`), 15000)));
   await sleep(500);
   await key('ArrowDown', { altKey: true }); await sleep(400);
-  check('Alt+Down in a PDF tab goes to the next group (wraps to t1)', (await bar()).startsWith('[kolektor-etra-2026]'), await bar());
+  check('Alt+Down in a PDF tab goes to the next group (wraps to t1)', (await cur()) === 'kolektor-etra-2026', await bar());
   await key('ArrowUp', { altKey: true }); await sleep(400);
-  check('Alt+Up in a live tab goes back to "other"', (await bar()).startsWith('[other]') && !!(await top(`return document.querySelector('iframe.on').src.includes('view?d=${pdf?.id}')`)), await bar());
+  check('Alt+Up in a live tab goes back to "other"', (await cur()) === 'other' && !!(await top(`return document.querySelector('iframe.on').src.includes('view?d=${pdf?.id}')`)), await bar());
   await key('ArrowUp', { altKey: true }); await sleep(400);
-  check('Alt+Up from a PDF tab goes to the previous group', (await bar()).startsWith('[knauf]'), await bar());
+  check('Alt+Up from a PDF tab goes to the previous group', (await cur()) === 'knauf', await bar());
   await shot('groups-four.png');
 
   // 6. --hc-terminal activates the group
   const hc = term => spawnSync(jdbin, ['--hc-terminal', term, '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });
   let h = hc('t1');
-  check('--hc-terminal t1 shows the group t1', h.status === 0 && !!(await until(async () => (await bar()).startsWith('[kolektor-etra-2026]'), 5000)), h.stderr);
+  check('--hc-terminal t1 shows the group t1', h.status === 0 && !!(await until(async () => (await cur()) === 'kolektor-etra-2026', 5000)), h.stderr);
   h = hc('t2');
-  check('--hc-terminal t2 shows the group t2', h.status === 0 && !!(await until(async () => (await bar()).startsWith('[knauf]'), 5000)), h.stderr);
+  check('--hc-terminal t2 shows the group t2', h.status === 0 && !!(await until(async () => (await cur()) === 'knauf', 5000)), h.stderr);
   run('t1', b, '--live');
-  check('a new document from t1 shows its group with it active', !!(await until(async () => (await bar()).startsWith('[kolektor-etra-2026]') && (await shown())?.includes('b.html'), 5000)), await bar());
+  check('a new document from t1 shows its group with it active', !!(await until(async () => (await cur()) === 'kolektor-etra-2026' && (await shown())?.includes('b.html'), 5000)), await bar());
 
   // 7. closing the last tab of a group drops the group
   await fetch(`${base}/api/close?d=${pdf.id}`, { method: 'POST' });
@@ -164,7 +166,7 @@ try {
     { env: { HOME: process.env.HOME, PATH: '/usr/bin:/bin', XDG_CONFIG_HOME: conf, XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8', timeout: 60000 });
   check('--hc-machine opens the remote page', h.status === 0, h.stderr || h.stdout);
   check('the remote group is "work2: thesis" (its repository folder)', await label('work2:t6') === 'work2: thesis', JSON.stringify(await groups()));
-  check('the remote group is the shown one', !!(await until(async () => (await bar()).startsWith('[work2: thesis]|work2: r.html'), 5000)), await bar());
+  check('the remote group is the shown one', !!(await until(async () => (await cur()) === 'work2: thesis' && (await bar()).includes('[work2: thesis]|work2: r.html'), 5000)), await bar());
   await sleep(1500);
   await shot('groups-three.png');
 

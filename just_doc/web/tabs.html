@@ -5,13 +5,17 @@
 <title>just-doc</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #525659; font: 12px/22px system-ui, sans-serif; }
-  #tabs { display: flex; height: 22px; background: #2b2d30; color: #a9adb3; user-select: none; }
+  #tabs { display: flex; height: 22px; background: #2b2d30; color: #a9adb3; user-select: none; position: relative; }
+  /* the colour of the shown group: a line under the whole bar */
+  #tabs::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--g, transparent); pointer-events: none; }
   .tab { padding: 0 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
          border-right: 1px solid #45484d; }
   /* a group of tabs: the session (hc terminal) that opened them; the chip of the shown group has its tabs after it */
   .chip { padding: 0 10px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
           border-right: 1px solid #45484d; background: #1e2023; color: #c9ccd2; font-weight: 600; }
-  .chip.cur { background: #3a3d42; color: #fff; }
+  /* each group has its colour: a stripe on its chip; the shown group's chip is filled with it */
+  .chip { box-shadow: inset 4px 0 0 var(--c); padding-left: 12px; }
+  .chip.cur { background: color-mix(in srgb, var(--c) 45%, #2b2d30); color: #fff; }
   .chip.other:hover { background: #33363a; }
   .chip small { font-weight: normal; color: #8a8f97; margin-left: 2px; }
   .chip b { background: #2f7bff; color: #fff; border-radius: 8px; padding: 0 6px; margin-left: 6px; font-size: 11px; font-weight: 600; }
@@ -28,6 +32,11 @@
   #toast { position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); z-index: 40; background: #1f7a3a; color: #fff;
            padding: 10px 18px; border-radius: 6px; font-size: 15px; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,.4); display: none; }
   #toast.err { background: #b00020; }
+  /* the name of the group, for a moment, when the group changes */
+  #gname { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 41; padding: 12px 28px; border-radius: 8px;
+           font-size: 22px; font-weight: 600; color: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.45); pointer-events: none;
+           opacity: 0; transition: opacity .25s; }
+  #gname.on { opacity: 1; transition: none; }
   /* one document needs no tab bar */
   body.one #tabs { display: none; }
   body.one iframe { top: 0; height: 100%; }
@@ -131,6 +140,7 @@
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
+<div id="gname"></div>
 <div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
 <div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
 <div id="help"><div class="card">
@@ -200,11 +210,15 @@ const done = {};     // document id -> whether the assistant finished its answer
 window.tabNews = (id, n, ready) => { news[id] = n; done[id] = ready; draw(); };
 
 const groupOf = t => t.group || '';
+// the colour of a group comes from its id, so it stays the same while the group lives
+const PALETTE = ['#4e9af1', '#f2a541', '#4fbf7f', '#e0646f', '#b48ead', '#3fb5c4', '#c9b44a', '#e07fb5'];
+const colourOf = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
 const inGroup = g => tabs.filter(t => groupOf(t) === g);
 
 function chip(g, cur) {
   const el = document.createElement('div');
   el.className = 'chip ' + (cur ? 'cur' : 'other');
+  el.style.setProperty('--c', colourOf(g.id));
   el.append(g.label);
   const mine = inGroup(g.id);
   if (cur) el.append(' ▾');
@@ -227,8 +241,11 @@ function draw() {
   bar.textContent = '';
   const cur = tabs.find(t => t.id === active), curId = cur ? groupOf(cur) : (groups[0]?.id ?? '');
   const several = groups.length > 1;
-  if (several) bar.appendChild(chip(groups.find(g => g.id === curId) || groups[0], true));
-  for (const t of several ? inGroup(curId) : tabs) {
+  // the groups keep their order; the shown one opens in place, its tabs after its chip
+  bar.style.setProperty('--g', several ? colourOf(curId) : 'transparent');
+  const order = several ? groups.flatMap(g => g.id === curId ? [g, ...inGroup(g.id)] : [g]) : tabs;
+  for (const t of order) {
+    if (t.label !== undefined) { bar.appendChild(chip(t, t.id === curId)); continue; }
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === active ? ' on' : '');
     el.textContent = t.name;
@@ -243,7 +260,6 @@ function draw() {
     el.onclick = () => show(t.id);
     bar.appendChild(el);
   }
-  if (several) for (const g of groups) if (g.id !== curId) bar.appendChild(chip(g, false));
   const keys = document.createElement('div');
   keys.id = 'keys';
   keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;' + (groups.length > 1 ? '<kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;' : '') + '<kbd>Ctrl</kbd> <kbd>w</kbd> close';
@@ -409,7 +425,15 @@ function livePage(f, t) {
 // show a group: the tab of it that was shown last, or its first
 function showGroup(g) {
   const mine = inGroup(g);
-  if (mine.length) show(mine.find(t => t.id === lastTab[g])?.id || mine[0].id);
+  if (!mine.length) return;
+  show(mine.find(t => t.id === lastTab[g])?.id || mine[0].id);
+  // its name in its colour, for a moment
+  const el = document.getElementById('gname'), grp = groups.find(x => x.id === g);
+  el.textContent = grp?.label || g;
+  el.style.background = colourOf(g);
+  el.classList.add('on');
+  clearTimeout(showGroup.t);
+  showGroup.t = setTimeout(() => el.classList.remove('on'), 700);
 }
 
 // Left / Right change the tab within its group, Up / Down the group, and w closes the tab; the viewers pass their tab keys on as these.

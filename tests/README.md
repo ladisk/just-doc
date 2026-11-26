@@ -22,7 +22,10 @@ text and on a plot, the anchors saved next to the page (the HTML file
 untouched), `--live --wait` giving comments and answers, `--live --reply`
 showing in the panel, a changed page keeping a comment on its element by id, a
 removed element giving a detached comment, and a comment and a reply on the
-page of the "other machine". A PDF of the "other machine" is shown here, its
+page of the "other machine". What changed on a live page: a hand-over, an edit of the
+text, `m` with its marks, cards and list rows, `a` on a change and on removed text,
+`gb`, `gh` and `M` against a commit in a temporary git repository (set `SHOTS` to a
+folder to save screenshots). A PDF of the "other machine" is shown here, its
 comments are saved there and Ctrl+Enter ends its `--wait`.
 For `--hc-machine` it starts a second just-doc on port 8963 as the "other
 machine" and reaches it through `tests/fake-ssh.py` (named in a config file in

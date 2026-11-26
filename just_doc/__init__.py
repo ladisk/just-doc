@@ -356,7 +356,10 @@ open comments, then the answers:
        {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
 
 "text:" instead of "element:" is a selected text. A comment marked
-"(detached ...)" is on an element that is no longer in the page. With --json
+"(detached ...)" is on an element that is no longer in the page. A comment can
+be about a change you made to the page: a line "(a comment on a change: before
+it, the text was: ...)" gives the text as it was, and "removed:" stands for
+text you deleted (it is the text as it was). With --json
 the output is {"comments": [...], "answers": {"round", "at", "answers"} or
 null}; each comment has its anchor: id, src (data-src), selector and quote.
 Answer and close comments as in steps 3 and 4, with --live:
@@ -673,6 +676,22 @@ def kept(doc, what):
     """
     name = hashlib.sha1(str(doc).encode()).hexdigest()[:16]
     return cache_dir() / (name + (".pdf" if what == "shown" else f".{what}.pdf"))
+
+
+def kept_live(doc, what):
+    """Return the path in the cache folder of what is kept for the live page ``doc``.
+
+    ``what`` is "round3.html" (the page file at the third Ctrl+Enter) or "round3.txt"
+    (the words of the page as the window showed them then, for "what changed").
+    """
+    name = hashlib.sha1((str(doc) + "\0live").encode()).hexdigest()[:16]
+    return cache_dir() / f"{name}.{what}"
+
+
+def keep_live_round(doc, number, text):
+    """Keep the live page ``doc`` and its ``text`` as they are at the Ctrl+Enter that started round ``number``."""
+    shutil.copyfile(doc, kept_live(doc, f"round{number}.html"))
+    kept_live(doc, f"round{number}.txt").write_text(text or "", encoding="utf-8")
 
 
 def rounds(doc):
@@ -1289,9 +1308,24 @@ def make_handler(tabs):
             """
             _, _, key, rel = route.split("/", 3) if route.count("/") >= 3 else ("", "", "", "")
             doc = tabs.docs.get(key) if key in tabs.live else None
+            rel = urllib.parse.unquote(rel)
+            old = re.fullmatch(r"\.jd-(round\d+|commit)\.html", rel)
+            if old and doc is not None:
+                # an earlier version of the page, in the folder of the page so that its relative files work
+                copy = kept_live(doc, old[1] + ".html")
+                if old[1] == "commit":
+                    body = git(doc, "show", "HEAD:./" + doc.name)
+                else:
+                    body = copy.read_bytes() if copy.exists() else None
+                if body is None:
+                    self._json(404, {"error": "the page is not in git, or not committed yet" if old[1] == "commit"
+                                     else "the page of this round is not kept"})
+                else:
+                    self._send(200, body, "text/html; charset=utf-8")
+                return
             try:
                 base = doc.parent.resolve()
-                file = (base / urllib.parse.unquote(rel)).resolve()
+                file = (base / rel).resolve()
                 if file == base or base not in file.parents or not file.is_file():
                     raise ValueError
                 body = file.read_bytes()
@@ -1389,6 +1423,15 @@ def make_handler(tabs):
                                      else "nothing was handed over yet (Ctrl+Enter)"})
                 else:
                     self._send(200, old.read_bytes(), "application/pdf")
+            elif route == "/api/was":
+                # the words of a live page as they were at the Ctrl+Enter of round n
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                try:
+                    text = kept_live(doc, f"round{int(query['n'][0])}.txt").read_text(encoding="utf-8")
+                except (OSError, KeyError, ValueError, TypeError, AttributeError):
+                    self._json(404, {"error": "the text of this round is not kept"})
+                else:
+                    self._json(200, {"text": text})
             elif route == "/api/rounds":
                 self._json(200, {"rounds": live_rounds(doc) if key in tabs.live else rounds(doc)})
             elif route == "/api/info":
@@ -1428,10 +1471,13 @@ def make_handler(tabs):
                         raise ValueError("JSON expected")
                     if key not in tabs.live or doc is None:
                         raise ValueError("this is not a live page that is open")
-                    answers = self._body()["answers"]
+                    obj = self._body()
+                    answers = obj["answers"]
                     if not isinstance(answers, dict):
                         raise ValueError("answers must be an object")
+                    text = obj.get("text")
                     number = save_answers(doc, answers)
+                    keep_live_round(doc, number, text if isinstance(text, str) else "")
                 except (OSError, KeyError, ValueError) as exc:
                     self._json(400, {"error": str(exc)})
                     return
@@ -2291,7 +2337,12 @@ def read_live(doc, as_json, only_open=False):
         where = anchor_text(a)
         where += "  (done)" if a.get("done") else "" if a["open"] or only_open else "  (answered)"
         kind = "element:" if a.get("kind") == "element" else "text:"
-        print(f"[{a['n']}] {where}\n    {kind:<8} {a.get('text') or '(no text inside)'}\n    comment: {a.get('comment') or '(none)'}")
+        text = a.get("text") or "(no text inside)"
+        if a.get("change") is not None and not a.get("text"):
+            kind, text = "removed:", a["change"]
+        print(f"[{a['n']}] {where}\n    {kind:<8} {text}\n    comment: {a.get('comment') or '(none)'}")
+        if a.get("change") is not None and a.get("text"):
+            print(f"    (a comment on a change: before it, the text was: {a['change'] or '(nothing, it is new)'})")
         anchor = a.get("anchor") or {}
         if anchor.get("id") and anchor.get("selector"):
             print(f"    selector: {anchor['selector']}")

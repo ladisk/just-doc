@@ -667,13 +667,16 @@ comment leaves the list and the page at the next `Ctrl` `Enter`.
 
 | key (outside a text field) | action |
 |---|---|
-| `a` | comment on the selected text, or on the element under the mouse; on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply |
+| `a` | comment on the selected text, or on the element under the mouse; on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply; on the card of a change: comment on the change |
 | `Enter` / `Shift` `Enter` / `Esc` | in the comment field: save / new line / cancel |
 | `x` | mark the selected comment done; again opens it |
 | `za` / `zR` / `zM` | open or close the row of the selected comment in the list / open all rows / close all rows |
 | `D` | show or hide the comments that are done and filed (they left the list at a `Ctrl` `Enter`) |
 | `C` | hide or show the marks on the page; the selected comment stays marked |
-| `n` / `p` | select the next / previous comment in the list (page order) and scroll the page to it; a click on a row or on a mark does the same |
+| `n` / `p` | select the next / previous comment in the list (page order) and scroll the page to it; with the changes marked, after the comments the changes that no comment is near; a click on a row or on a mark does the same |
+| `m` / `M` | mark what is not as it was at the last `Ctrl` `Enter` / at the last commit; again hides the marks (see "What changed on a live page") |
+| `gb` | show the page as it was at the last `Ctrl` `Enter` (after `M`: at the last commit) in place of the page, read only; `gb` or `Esc` goes back |
+| `gh` | the history of the rounds; `j` / `k` move, `Enter` shows the page at the end of that round, `Esc` closes |
 | `d` / `u` | delete the selected comment / undo the delete |
 | `c` | hide or show the comment panel |
 | `Esc` | unselect the comment |
@@ -715,8 +718,45 @@ plots an `id`, and where it helps `data-src="plots.py:120"` for the code that
 makes them; then a comment stays in place when the page is rewritten, and the
 assistant knows where to change it.
 
-A live page has no PDF file to compare: the hand-over times (`/api/rounds`) are
-those of its `Ctrl` `Enter` presses, kept in `page.answers.json`.
+The hand-over times (`/api/rounds`) are those of the `Ctrl` `Enter` presses,
+kept in `page.answers.json`.
+
+### What changed on a live page
+
+`m`, `M`, `gb` and `gh` work as in the PDF viewer (see "What changed" and
+"Rounds and history"), with the same marks, words and cards:
+
+- At every `Ctrl` `Enter` just-doc keeps a copy of the page file and the words
+  of the page as the window showed them, in the cache folder
+  (`~/.cache/just-doc`), one pair for each round.
+- `m` compares the words of the page now with those at the last `Ctrl` `Enter`;
+  `M` with the page file of the last commit (`git show HEAD:./page.html`; the
+  window loads it out of sight, next to the page, and reads its words when it
+  has stopped changing). A new or changed text is underlined in blue, a thin
+  red mark stands where text was removed, and a wavy line marks a change that
+  no comment is near (within 20 words of it). The marks stay on when the page
+  is loaded again. Without a hand-over yet, or for a page that is not in git,
+  the window says so.
+- Below the comments the list has "N changes without a comment"; `n` and `p`
+  go through them after the comments, each with a card of its own (the old words
+  struck out in red, the new ones in green). `a` on it comments on the change:
+  the comment has `change` with the text as it was (empty: new text), `text`
+  with the new text, and for removed text `kind` is `element`, `text` is empty
+  and the comment sits on the element around the place. `--live --wait` and
+  `--live --read` print it as the PDF ones do: a line with the text as it was
+  before the change, and `removed:` for deleted text.
+- `gb` covers the page with the page as it was at the last `Ctrl` `Enter`
+  (the saved copy, served from the folder of the page, so its relative files
+  work), read only and without marks; the key bar turns purple. `gh` lists the
+  rounds with what you handed over, the answers and the changes up to the next
+  `Ctrl` `Enter`; `Enter` on a round shows the page at the end of it the same
+  way.
+
+What is compared is the text a reader sees: words in reading order, ignoring
+punctuation, capital letters and layout. Changes to plots (svg), canvas, WebGL
+views, pictures, form fields, styles and scripts are not detected: use `gb` to
+look. The copies of the page keep the page file only, so an old page shows the
+current version of its style sheets, scripts and data files.
 
 `--live --wait` and `--live --read` print the comments as `--wait` and
 `--read` do for a PDF, with the anchor in place of the page:

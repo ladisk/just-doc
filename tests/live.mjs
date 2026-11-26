@@ -47,12 +47,13 @@ try {
 <link rel="stylesheet" href="/_lib/page.css"><link rel="stylesheet" href="sub/style.css">
 <script src="/_lib/plotly.min.js"></script><script src="sub/data.js"></script>
 <h1 id="v">${v}</h1>
-${o.before || ''}<p id="intro">The quick brown fox jumps over the lazy dog.</p>
+${o.before || ''}<p id="intro">${o.intro || 'The quick brown fox jumps over the lazy dog.'}</p>
 <fieldset class="choice"><legend>Pick</legend><label><input type="radio" name="pick" value="A"> A</label><label><input type="radio" name="pick" value="B"> B</label></fieldset>
 <label><input type="checkbox" class="toggle" name="ok"> ok</label>
 <label><input type="checkbox" name="tags" value="x">x</label><label><input type="checkbox" name="tags" value="y">y</label>
 <select name="many" multiple><option>m1</option><option>m2</option></select>
 <form><input name="note"><textarea name="long"></textarea></form>
+<p id="filler">${Array.from({ length: 45 }, (_, i) => 'filler' + i).join(' ')}</p>${o.after || ''}
 ${o.noPlot ? '' : '<div id="plot" class="plot"></div>'}<div id="plot2" class="plot"></div><div style="height:3000px"></div>
 <script>${o.noPlot ? '' : "Plotly.newPlot('plot', [{y: window.DATA}]);"}
 Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {color: '#010203'}});</script>
@@ -310,6 +311,133 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('D shows the done comment in the list again, as in the PDF viewer not on the page', (await rowsNow()) === 2 && await top(`return document.querySelector('.it.done .st')?.textContent === 'done ✓'`));
   await press('D');
   check('D hides it again', (await rowsNow()) === 1);
+
+  // 6b. what changed: m, M, gb, gh and the change in the list
+  const SHOTS = process.env.SHOTS;
+  const shot = async name => { if (!SHOTS) return; mkdirSync(SHOTS, { recursive: true });
+    writeFileSync(join(SHOTS, name), Buffer.from((await cmd('Page.captureScreenshot', { format: 'png' })).data, 'base64')); };
+  const fchg = () => top(`return document.getElementById('fchg').textContent`);
+  const toastText = () => top(`return document.getElementById('toast').textContent`);
+  await ev(`d.getElementById('intro').scrollIntoView(); return 1`);
+  await select('intro', 35, 43);
+  await press('a');
+  check('a comment on "lazy dog" for the changes', await typeIn('dog or cat?'));
+  const c3 = await until(() => stored().find(a => a.comment === 'dog or cat?'), 5000);
+  await press('Escape');
+  await press('M');
+  check('M on a page that is not in git says so', !!(await until(async () => /not in git/.test(await toastText()), 5000)) && (await fchg()) === '', await toastText());
+  await ev(`d.body.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true})); return 1`);
+  const rounds3 = await until(async () => { const j = await (await fetch(`${base}/api/rounds?d=${tab.id}`)).json(); return j.rounds.length >= 3 && j.rounds; }, 5000);
+  check('Ctrl+Enter keeps the text of the round on the server', !!rounds3 && (await (await fetch(`${base}/api/was?d=${tab.id}&n=${rounds3?.length}`)).json()).text.includes('A quick brown fox elsewhere.'));
+  check('and the page of the round, served in the folder of the page',
+    (await (await fetch(`${base}${at}.jd-round${rounds3?.length}.html`)).text()).includes('jumps over the lazy dog'));
+  check('a round that is not kept gives 404', (await fetch(`${base}${at}.jd-round99.html`)).status === 404 && (await fetch(`${base}/api/was?d=${tab.id}&n=99`)).status === 404);
+  await press('m');
+  check('m right after a hand-over: no changes', !!(await until(async () => /^no changes since the last hand-over/.test(await fchg()), 5000)), await fchg());
+  await press('m');
+  check('m again hides the marks', !!(await until(async () => (await fchg()) === '', 3000)));
+  await press('m');
+  await until(async () => /no changes/.test(await fchg()), 5000);
+  // the page is changed: a sentence changed in two places, a paragraph removed, new text far from the comment
+  writeFileSync(doc, page('v2', { noPlot: true, intro: 'The quick brown fox leaps over the lazy cat.', after: '<h2 id="newh">Brand new closing words here</h2>', noSection: true }));
+  utimesSync(doc, new Date(Date.now() - 5000), new Date(Date.now() - 5000));
+  const marked = await until(() => ev(`return !!d.getElementById('newh') && d.querySelectorAll('#__jd_hl .chg').length >= 3`), 15000);
+  check('the marks stay on when the page is loaded again', !!marked);
+  const info = await fchg();
+  check('the key bar counts the changes and the one nobody asked for', /^4 changes since the last hand-over · 1 not asked for$/.test(info), info);
+  const classes = await ev(`const m = [...d.querySelectorAll('#__jd_hl .chg')]; return { cut: m.filter(x => x.classList.contains('cut')).length,
+    own: m.filter(x => x.classList.contains('own')).length, all: m.length, comments: d.querySelectorAll('#__jd_hl [data-id]').length }`);
+  check('a thin red mark where text was removed, one wavy mark, the others plain blue', classes.cut === 1 && classes.own === 1 && classes.all === 4, JSON.stringify(classes));
+  const under = await ev(`const g = [...d.querySelectorAll('#__jd_hl .chg:not(.cut):not(.own)')][0], r = g.getBoundingClientRect(), i = d.getElementById('intro').getBoundingClientRect();
+    return r.top >= i.top - 2 && r.bottom <= i.bottom + 2 && w.getComputedStyle(g).backgroundImage.includes('gradient')`);
+  check('a change is a blue line under the new words, on their line', under === true);
+  check('the list says how many changes have no comment', !!(await until(() => top(`return /2 changes without a comment · 2 to look at/.test(document.querySelector('.grp.chgs')?.textContent || '')`), 3000)),
+    await top(`return document.querySelector('#list').innerText`));
+  await shot('1-changes.png');
+  // n goes through the comments, then the changes with no comment
+  const cardText = () => ev(`return d.querySelector('#__jd_card .card')?.textContent || ''`);
+  let seenChange = false;
+  for (let i = 0; i < 8 && !seenChange; i++) { await press('n'); seenChange = /not asked for/.test(await cardText()); }
+  check('n reaches a change that no comment is near: a card with the new text and "not asked for"', seenChange && /Brand new closing words here/.test(await cardText()), await cardText());
+  check('its card shows the old words struck out and the new ones: del / ins', await ev(`return !!d.querySelector('#__jd_card .card ins') && d.querySelector('#__jd_card .card').classList.contains('own')`));
+  check('its row in the list is marked', !!(await top(`return !!document.querySelector('.it.chg.on .st.chg')`)));
+  await shot('2-change-card.png');
+  await press('a');
+  check('a on it opens the field', await typeIn('why this heading?'));
+  const c4 = await until(() => stored().find(a => a.comment === 'why this heading?'), 5000);
+  check('a comment on a change is saved with the text as it was (nothing, it is new)', c4?.change === '' && /Brand new closing words/.test(c4.text) && c4.kind === 'text', JSON.stringify(c4));
+  // the first stretch of changes: the removed paragraph, the sentence changed near the comment
+  await press('Escape');
+  let first = false;
+  for (let i = 0; i < 8 && !first; i++) { await press('n'); first = /near your comment/.test(await cardText()); }
+  check('n reaches the changes near your comment, with their words', first && /leaps/.test(await cardText()) && /jumps/.test(await cardText()), await cardText());
+  await press('a');
+  check('a on the removed text comments on the place', await typeIn('why gone?'));
+  const c5 = await until(() => stored().find(a => a.comment === 'why gone?'), 5000);
+  check('a comment on removed text has no text and keeps the words as they were', c5?.change === 'A quick brown fox elsewhere.' && c5.text === '' && c5.kind === 'element', JSON.stringify(c5));
+  rd = run('t1', doc, '--live', '--read');
+  check('--live --read prints a comment on a change and on removed text', /removed: +A quick brown fox elsewhere\./.test(rd.stdout)
+    && /a comment on a change: before it, the text was: \(nothing, it is new\)/.test(rd.stdout), rd.stdout);
+  await press('z'); await press('R');
+  await shot('5-list-open.png');
+  await press('z'); await press('M');
+  await press('Escape');
+  // gb: the page as it was at the last hand-over, in place of the page
+  await press('g'); await press('b');
+  const old = await until(() => top(`const f = document.querySelector('iframe.ol'); return f?.contentDocument?.getElementById('intro')?.textContent`), 8000);
+  check('gb shows the page as it was at the last hand-over, read only', old === 'The quick brown fox jumps over the lazy dog.', String(old));
+  check('the key bar says so', /the page as it was at the last hand-over · gb: as it is now/.test(await fchg()), await fchg());
+  await press('a');
+  check('a on the old page is refused', /read only/.test(await toastText()) && !(await top(`return !!document.querySelector('iframe.ol')?.contentDocument?.getElementById('ed')`)));
+  await shot('3-old-page.png');
+  await press('g'); await press('b');
+  check('gb again goes back to the page', !(await top(`return !!document.querySelector('iframe.ol')`)));
+  await press('g'); await press('b'); await sleep(500);
+  await press('Escape');
+  check('Esc goes back too', !(await top(`return !!document.querySelector('iframe.ol')`)));
+  // gh: the rounds
+  await press('g'); await press('h');
+  check('gh opens the history, newest round first, with the changes so far', !!(await until(() => top(`const t = document.getElementById('hist').innerText;
+    return document.getElementById('hist').classList.contains('open') && /Round 3/.test(t) && /changes so far/i.test(t) && /leaps/.test(t) && /Brand new closing words here/.test(t)`), 8000)),
+    await top(`return document.getElementById('hist').innerText`));
+  check('it says what you handed over', /you handed over/i.test(await top(`return document.getElementById('hist').innerText`)));
+  await shot('4-history.png');
+  await press('j');
+  check('j moves to the round before', await top(`return /Round 2/.test(document.querySelector('.hr.on .hh')?.textContent)`));
+  await press('Enter');
+  const end2 = await until(() => top(`const f = document.querySelector('iframe.ol'); return f?.contentDocument?.getElementById('intro')?.textContent`), 8000);
+  check('Enter shows the page at the end of that round (the next hand-over)', end2 === 'The quick brown fox jumps over the lazy dog.' && /at the end of round 2/.test(await fchg()), `${end2} ${await fchg()}`);
+  await press('Escape');
+  await press('g'); await press('h');
+  await press('Escape');
+  check('Esc closes the history', !(await top(`return document.getElementById('hist').classList.contains('open')`)));
+  // M: against the last commit of a page in a git repository
+  const gsite = join(tmp, 'gsite'), gdoc = join(gsite, 'g.html');
+  mkdirSync(gsite);
+  const git = (...a) => spawnSync('git', ['-C', gsite, '-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { encoding: 'utf8' });
+  git('init', '-q');
+  writeFileSync(gdoc, '<!doctype html><meta charset="utf-8"><h1>g</h1><p id="p">One two three four five.</p><p>Second paragraph here.</p>');
+  git('add', 'g.html'); git('commit', '-q', '-m', 'one');
+  writeFileSync(gdoc, '<!doctype html><meta charset="utf-8"><h1>g</h1><p id="p">One twoo three four five six.</p><p>Second paragraph here.</p>');
+  run('t1', gdoc, '--live');
+  const gid = await until(async () => (await (await fetch(base + '/api/tabs')).json()).tabs.find(t => t.name === 'g.html')?.id, 10000);
+  await top(`document.querySelectorAll('.tab').forEach(t => t.textContent.includes('g.html') && t.click()); return 1`);
+  await until(() => ev(`return !!d.getElementById('__jd_marks') && d.getElementById('p')?.textContent.includes('six')`), 15000);
+  await press('M');
+  check('M marks what is not as it was at the last commit', !!(await until(async () => /^2 changes since the last commit · 2 not asked for$/.test(await fchg()), 15000)), await fchg());
+  await press('g'); await press('b');
+  const goldt = await until(() => top(`return document.querySelector('iframe.ol')?.contentDocument?.getElementById('p')?.textContent`), 8000);
+  check('gb after M shows the page of the last commit', goldt === 'One two three four five.', String(goldt));
+  await press('Escape');
+  await press('M');
+  check('M again hides the marks', !!(await until(async () => (await fchg()) === '', 3000)));
+  git('commit', '-q', '-a', '-m', 'two');
+  await press('M');
+  check('M with nothing changed since the commit says so', !!(await until(async () => /^no changes since the last commit/.test(await fchg()), 15000)), await fchg());
+  await press('M');
+  await fetch(`${base}/api/close?d=${gid}`, { method: 'POST' });
+  await until(async () => (await (await fetch(base + '/api/tabs')).json()).tabs.length === 1, 5000);
+  await top(`document.querySelectorAll('.tab').forEach(t => t.textContent.includes('page.html') && t.click()); return 1`);
 
   // --shot: a picture of the page as it looks live, without the window
   const png = join(tmp, 'shot.png');

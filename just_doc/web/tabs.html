@@ -83,12 +83,48 @@
   .it .r { margin: 3px 0 0 4px; padding-left: 6px; border-left: 2px solid #0050d0; white-space: pre-wrap; }
   .it .r b { color: #0050d0; }
   .it .r.mine { border-left-color: #999; font-weight: 600; }
+  .it .q s { text-decoration-color: #d00000; }
+  .it .q u { text-decoration: none; background: #c9f2c9; color: #222; }
+  /* what changed: the rows of the changes, as in the PDF viewer */
+  .st.chg { background: #fff; color: #2f7bff; box-shadow: inset 0 0 0 1px #2f7bff; }
+  .it.chg.seen:not(.on) { opacity: .55; }
+  .grp { padding: 3px 10px; background: #e9e9e5; color: #555; font-size: 11px; font-weight: 700; text-transform: uppercase;
+         letter-spacing: .03em; border-bottom: 1px solid #ddd; }
+  .grp.chgs { cursor: pointer; }
+  .grp.chgs:hover { background: #e0e0db; }
+  #fchg { color: #8ab4ff; }
+  /* the page as it was (gb): over the live page, with a purple edge, and a purple key bar */
+  iframe.ol { z-index: 5; box-shadow: inset 0 0 0 3px #7a3fd0; background: #fff; }
+  body.oldview #foot { background: #3b2a5c; }
+  body.oldview #fchg { color: #d8c2ff; font-weight: 700; }
+  /* the history of the rounds (gh): at the left, over the page */
+  #hist { position: fixed; top: 22px; left: 0; bottom: var(--foot, 22px); width: 520px; max-width: 90vw; z-index: 45; display: none;
+          background: #f4f4f2; color: #222; border-right: 1px solid #999; box-shadow: 4px 0 16px rgba(0,0,0,.4); overflow-y: auto;
+          font-size: 13px; line-height: 1.4; }
+  body.one #hist { top: 0; }
+  #hist.open { display: block; }
+  #hist h1 { font-size: 14px; margin: 0; padding: 10px 12px; background: #e4e4e0; position: sticky; top: 0; z-index: 1; }
+  #hist h1 small { font-weight: normal; color: #777; }
+  .hr { border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  .hr.on { box-shadow: inset 3px 0 0 #d00000; background: #fff4ef; }
+  .hh { padding: 6px 12px; cursor: pointer; font-weight: 700; }
+  .hh small { font-weight: normal; color: #777; }
+  .hs { margin: 6px 12px 2px; color: #777; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .hi { margin: 2px 12px 2px 18px; cursor: pointer; }
+  .hi:hover { background: #eaeae6; }
+  .hi i { color: #555; }
+  .hi b { color: #0050d0; }
+  .hi .ctx { color: #888; }
+  .hi del { color: #c00000; background: #ffe3e3; }
+  .hi ins { color: #0b5d1e; background: #d4f5d4; text-decoration: none; font-weight: 600; }
+  .hn { margin: 2px 12px 8px 18px; color: #999; }
 </style>
 </head>
 <body class="one">
 <div id="tabs"></div>
 <div id="toast"></div>
-<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
+<div id="hist"><h1>History <small>j / k move · Enter shows the round in the window · Esc closes</small></h1><div id="histlist"></div></div>
 <div id="help"><div class="card">
   <h2>Keys of a live page — <kbd>/</kbd> filters, <kbd>?</kbd> or <kbd>Esc</kbd> closes</h2>
   <input id="hq" type="text" spellcheck="false" placeholder="/ filter: type a key or a word">
@@ -99,6 +135,11 @@
     <tr><td><kbd>za</kbd></td><td>open or close the row of the comment in the list; <kbd>zR</kbd> / <kbd>zM</kbd> open / close all rows</td></tr>
     <tr><td><kbd>D</kbd></td><td>show or hide the comments that are done</td></tr>
     <tr><td><kbd>C</kbd></td><td>hide or show the marks on the page; the selected comment stays marked</td></tr>
+    <tr><td><kbd>m</kbd></td><td>mark what is not as it was at your last <kbd>Ctrl</kbd> <kbd>Enter</kbd>: new text underlined in blue, a red line where text was removed, a wavy line for a change that no comment asked for; again hides the marks</td></tr>
+    <tr><td><kbd>M</kbd></td><td>the same against the last commit</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd> on a change</td><td>with the marks on, <kbd>n</kbd> and <kbd>p</kbd> go to the changes that no comment is near, after the comments; <kbd>a</kbd> comments on the change</td></tr>
+    <tr><td><kbd>gb</kbd></td><td>show the page as it was at the last hand-over (or the last commit, after <kbd>M</kbd>) in place of the page, read only; <kbd>gb</kbd> or <kbd>Esc</kbd> goes back</td></tr>
+    <tr><td><kbd>gh</kbd></td><td>the history of the rounds: what you handed over, the answers, the changes; <kbd>j</kbd> / <kbd>k</kbd> move, <kbd>Enter</kbd> shows the page at the end of that round, <kbd>Esc</kbd> closes</td></tr>
     <tr><td><kbd>d</kbd></td><td>delete the selected comment</td></tr>
     <tr><td><kbd>u</kbd></td><td>undo the last delete</td></tr>
     <tr><td><kbd>c</kbd></td><td>hide or show the comment list</td></tr>
@@ -110,6 +151,7 @@
     <tr><td><kbd>Esc</kbd></td><td>deselect the comment</td></tr>
     <tr><td><span class="st new">new reply</span></td><td>the assistant answered or marked it done; it stays blue until you select it</td></tr>
     <tr><td><span class="st read">answered</span> <span class="st done">done ✓</span></td><td>answered and looked at; done by the assistant or by you (<kbd>x</kbd>), it leaves the list at your next <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>D</kbd> shows it again)</td></tr>
+    <tr><td><span class="st chg">change</span></td><td>a change of the text that no comment is near; it is listed below the comments (<kbd>n</kbd> goes to it)</td></tr>
     <tr><td><span class="st">not handed over</span></td><td>you wrote it since the last <kbd>Ctrl</kbd> <kbd>Enter</kbd></td></tr>
     <tr><td><span class="st wait">not seen yet</span> <span class="st skip">seen 10:31, no reply</span></td><td>handed over; the assistant has not read it yet, or read it and left it without a reply</td></tr>
   </table>

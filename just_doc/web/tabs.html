@@ -208,7 +208,7 @@ window.tabNews = (id, n, ready) => { news[id] = n; done[id] = ready; draw(); };
 
 const groupOf = t => t.group || '';
 // the colour of a group comes from its id, so it stays the same while the group lives
-const PALETTE = ['#4e9af1', '#f2a541', '#4fbf7f', '#e0646f', '#b48ead', '#3fb5c4', '#c9b44a', '#e07fb5'];
+const PALETTE = ['#4e9af1', '#f2a541', '#4fbf7f', '#e0646f', '#b48ead', '#3fb5c4', '#c9b44a', '#7f8cf0'];
 const colourOf = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
 const inGroup = g => tabs.filter(t => groupOf(t) === g);
 

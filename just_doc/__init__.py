@@ -226,6 +226,11 @@ It opens as a tab of the just-doc window with its scripts running, and loads
 again by itself whenever you save the file; run the command once. On a
 machine without a display (over ssh) no window opens: the author sees the
 page from their own machine through ssh. Files next to the page can be linked by relative paths.
+Name the file after what it shows: the tab shows only the file name, and the
+author has several pages open. adc_v12_stack_3d.html, not viewer.html or
+index.html; also give the page a <title> that says the same. The same holds
+for a PDF or a markdown file.
+
 These are served by just-doc; use them instead of the internet:
 
     /_lib/page.css                         a small style sheet: a readable text column, light

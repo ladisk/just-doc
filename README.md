@@ -127,7 +127,8 @@ replies of its tabs, an orange dot when a `--wait` waits or a `Ctrl+Enter` was
 not taken yet, and its tab count. The groups keep their order. The shown group
 has a lighter row with a blue bar at its left. `Alt+s` hides or shows the list;
 the window keeps the choice, and with the list hidden the name of the shown
-group is in front of its tabs. With one group there is no list. A click on a
+group is in front of its tabs. Drag the right edge of the list to change its
+width (kept too); a double-click on the edge sets it back. With one group there is no list. A click on a
 row, or `Alt+Down` / `Alt+Up`, shows that group (its tab shown last). `H` / `L` and `Alt+Left` / `Alt+Right` change the
 tab within the group and wrap. `--hc-terminal` and a new document show their own
 group. A group ends with its last tab.

@@ -7,18 +7,24 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #525659; font: 12px/22px system-ui, sans-serif; }
   /* --bar: the height of the row of tabs above the pages; --left: the width of the list of groups at the left */
   body { --bar: 30px; --left: 0px; --accent: #2f7bff; --strip: #1e1f22; --raised: #2b2d30; }
-  body.rail { --left: 180px; }
+  body.rail { --left: var(--railw, 140px); }
+  /* the edge of the list of groups: drag it to change the width, double-click for the default */
+  #grip { display: none; position: fixed; top: 0; bottom: 0; left: calc(var(--left) - 3px); width: 6px; cursor: col-resize; z-index: 11; }
+  #grip:hover, body.dragging #grip { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+  body.rail #grip { display: block; }
+  body.dragging iframe { pointer-events: none; }
+  body.dragging { cursor: col-resize; user-select: none; }
   /* the groups of tabs (a group: the hc terminal that opened them), one row each; only with several groups */
   #groups { display: none; position: fixed; left: 0; top: 0; bottom: 0; width: var(--left); box-sizing: border-box; z-index: 10;
             flex-direction: column; background: var(--strip); color: #b4b8bf; border-right: 1px solid #111214;
             user-select: none; overflow-y: auto; overflow-x: hidden; }
   body.rail #groups { display: flex; }
   body.rail.livefoot #groups { bottom: var(--foot, 22px); }
-  #groups h1 { flex: none; height: var(--bar); margin: 0; padding: 0 12px; display: flex; align-items: center; justify-content: space-between;
+  #groups h1 { flex: none; height: var(--bar); margin: 0; padding: 0 8px 0 10px; display: flex; align-items: center; justify-content: space-between;
                font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #6f747c;
                border-bottom: 1px solid #111214; box-sizing: border-box; }
   #groups h1 kbd { text-transform: none; letter-spacing: 0; }
-  .grow { flex: none; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 12px; cursor: pointer;
+  .grow { flex: none; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 10px; cursor: pointer;
           font-size: 12.5px; box-shadow: inset 3px 0 0 transparent; }
   .grow:hover { background: #26282b; color: #dfe1e5; }
   .grow.cur { background: var(--raised); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
@@ -158,6 +164,7 @@
 </head>
 <body class="one">
 <div id="groups"></div>
+<div id="grip" title="drag to change the width, double-click for the default"></div>
 <div id="tabs"></div>
 <div id="toast"></div>
 <div id="foot"><span id="mode">normal</span><span id="fhint"></span><span id="fchg"></span><span id="fkeys"><kbd>a</kbd> comment/reply &nbsp;<kbd>n</kbd>/<kbd>p</kbd> next/back &nbsp;<kbd>x</kbd> done &nbsp;<kbd>za</kbd> fold &nbsp;<kbd>D</kbd> done ones &nbsp;<kbd>C</kbd> marks &nbsp;<kbd>m</kbd>/<kbd>M</kbd> changes &nbsp;<kbd>gb</kbd> as it was &nbsp;<kbd>gh</kbd> history &nbsp;<kbd>d</kbd> delete &nbsp;<kbd>u</kbd> undo &nbsp;<kbd>c</kbd> list &nbsp;<kbd>Ctrl</kbd>+<kbd>Enter</kbd> hand over &nbsp;<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>Alt</kbd>+<kbd>s</kbd> groups &nbsp;<kbd>q</kbd> quit &nbsp;<kbd>?</kbd> all keys</span></div>
@@ -236,6 +243,27 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 // the list of groups at the left (Alt+s hides or shows it); the choice is kept in the browser
 let railHidden = false;
 try { railHidden = localStorage.getItem('jd-rail') === 'hidden'; } catch {}
+// its width, dragged at its right edge, is kept in the browser too
+const RAILW = [90, 400];
+function setRailW(w) {
+  if (w) document.body.style.setProperty('--railw', Math.round(Math.min(RAILW[1], Math.max(RAILW[0], w))) + 'px');
+  else document.body.style.removeProperty('--railw');
+}
+try { setRailW(+localStorage.getItem('jd-railw') || 0); } catch {}
+{
+  const grip = document.getElementById('grip');
+  grip.addEventListener('pointerdown', e => {
+    e.preventDefault(); grip.setPointerCapture(e.pointerId); document.body.classList.add('dragging');
+    const move = ev => setRailW(ev.clientX);
+    const up = () => {
+      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up);
+      document.body.classList.remove('dragging');
+      try { localStorage.setItem('jd-railw', parseInt(getComputedStyle(document.body).getPropertyValue('--left'))); } catch {}
+    };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+  });
+  grip.addEventListener('dblclick', () => { setRailW(0); try { localStorage.removeItem('jd-railw'); } catch {} });
+}
 function toggleRail() {
   railHidden = !railHidden;
   try { localStorage.setItem('jd-rail', railHidden ? 'hidden' : 'shown'); } catch {}

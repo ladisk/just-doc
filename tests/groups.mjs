@@ -112,7 +112,7 @@ try {
   check('the list: a row per group in order; the tabs of the shown group only',
     !!(await until(async () => (await bar()) === '[kolektor-etra-2026 2][knauf 2]/x.html|y.html', 8000)), await bar());
   gv = await geo();
-  check('the list at the left (180px), the tabs and the page right of it', gv.join() === 'true,180,180,0,30,180,30', gv.join());
+  check('the list at the left (140px), the tabs and the page right of it', gv.join() === 'true,140,140,0,30,140,30', gv.join());
   check('one accent for the shown group, no colour per group; one row is the shown one',
     !!(await top(`const rows = [...document.querySelectorAll('#groups .grow')];
       return rows.every(e => !e.getAttribute('style')) && document.querySelectorAll('#groups .grow.cur').length === 1
@@ -131,7 +131,7 @@ try {
   check('with the list hidden Alt+Down still changes the group', (await top(`return document.getElementById('where')?.textContent`)) === 'kolektor-etra-2026');
   await key('ArrowUp', { altKey: true }); await sleep(400);
   await key('s', { altKey: true }); await sleep(300);
-  check('Alt+s shows the list again', (await geo()).join() === 'true,180,180,0,30,180,30' && await top(`return localStorage.getItem('jd-rail')`) === 'shown', (await geo()).join());
+  check('Alt+s shows the list again', (await geo()).join() === 'true,140,140,0,30,140,30' && await top(`return localStorage.getItem('jd-rail')`) === 'shown', (await geo()).join());
   await top(`document.querySelectorAll('#strip .tab')[1].click(); return 1`); await sleep(300);
   check('the new document is shown (group t2, y.html)', await shown() === 'y.html' || (await shown())?.includes('y.html'), await shown());
 

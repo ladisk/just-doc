@@ -1876,8 +1876,9 @@ def port_owner(port):
 
 def busy(state):
     """Whether a --wait waits on the just-doc whose /api/tabs answer is ``state``."""
-    # an older just-doc has only "waiting", which stays true for 3 s after a --wait ended
-    return any(t.get("waits", t.get("waiting")) for t in state.get("tabs", []))
+    # an older just-doc has only "waiting", which stays true for 3 s after a --wait ended; the
+    # --wait of a document of another machine waits on the just-doc there, not on this one
+    return any(t.get("waits", t.get("waiting")) for t in state.get("tabs", []) if not t.get("remote"))
 
 
 def restart(url, state):
@@ -2245,7 +2246,12 @@ def hc_terminal(terminal, port, window=True, as_print=False, doc_id=None):
                               else f"/view?d={got['id']}")
                 print(json.dumps({"port": candidate, **got}, ensure_ascii=False))
                 return
-            got = ask(url + "api/focus", {"terminal": terminal, **({"id": doc_id} if doc_id else {})}, timeout=1)
+            state = ask(url + "api/tabs", timeout=1)
+            if state.get("app") != "just-doc":
+                continue
+            # a just-doc of another version is updated first, as the other commands do
+            current(url, state)
+            got = ask(url + "api/focus", {"terminal": terminal, **({"id": doc_id} if doc_id else {})}, timeout=5)
         except Exception:  # noqa: BLE001
             continue
         if window and not got["windows"]:

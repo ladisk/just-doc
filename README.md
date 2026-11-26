@@ -677,6 +677,21 @@ view that stands still: it draws 60 times a second, and a large model (a
 PCB, an assembly) keeps the author's machine busy and hot. Use it only while
 something moves by itself, and stop it after.
 
+Every 3D view of a part or an assembly has a section: the author must be
+able to cut it open. `<jd-scene>` has one. In your own three.js, add the
+same: buttons off, X, Y, Z and a slider for the position, in the controls
+bar above the view, with a clipping plane on the renderer:
+
+```js
+// Section: off / X / Y / Z buttons and a position slider in the controls bar
+const plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+function section(axis, at) {  // axis: null (off), 'x', 'y' or 'z'; at: position in model units
+  renderer.clippingPlanes = axis ? [plane] : [];
+  if (axis) plane.set(new THREE.Vector3(...['x', 'y', 'z'].map(a => a === axis ? -1 : 0)), at);
+  draw();
+}
+```
+
 Your own three.js with hundreds of parts or more (CAD, KiCad) is slow, one
 draw call per part (`<jd-scene>` merges the meshes of a part by itself). After loading it, and after measuring and finding parts by name,
 merge it with `mergeByMaterial` (one mesh per material, the picture stays the

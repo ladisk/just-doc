@@ -57,8 +57,6 @@
             color: #9a9fa7; visibility: hidden; }
   .tab:hover .x, .tab.on .x { visibility: visible; }
   .tab .x:hover { background: #45484d; color: #fff; }
-  #keys { flex: none; margin-left: auto; padding: 0 12px; white-space: nowrap; display: flex; align-items: center; gap: 4px;
-          font-size: 11px; color: #6f747c; }
   kbd { font: 10.5px/15px ui-monospace, monospace; background: #303236; color: #b4b8bf; border-radius: 3px; padding: 0 4px; }
   iframe { position: absolute; left: var(--left); top: var(--bar); width: calc(100% - var(--left)); height: calc(100% - var(--bar)); border: 0; visibility: hidden; }
   iframe.on { visibility: visible; }
@@ -332,9 +330,6 @@ function draw() {
     strip.appendChild(tab);
   }
   bar.appendChild(strip);
-  const keys = el('div'); keys.id = 'keys';
-  keys.innerHTML = '<kbd>H</kbd>/<kbd>L</kbd> tab &nbsp;' + (several ? '<kbd>Alt</kbd> <kbd>↑</kbd>/<kbd>↓</kbd> group &nbsp;<kbd>Alt</kbd> <kbd>s</kbd> list &nbsp;' : '') + '<kbd>Ctrl</kbd> <kbd>w</kbd> close';
-  bar.appendChild(keys);
   // the bar also shows for a single live page, so that its marker is seen
   document.body.classList.toggle('one', tabs.length < 2 && !tabs.some(t => t.live));
   const all = tabs.reduce((sum, t) => sum + (news[t.id] || 0), 0), shown = tabs.find(t => t.id === active);

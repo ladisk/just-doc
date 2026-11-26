@@ -277,19 +277,25 @@ A model that turns with the mouse, with its controls above it:
       const controls = new OrbitControls(camera, renderer.domElement);
       // two-finger scroll pans, pinch zooms, shift + scroll turns; a mouse wheel zooms
       touchpad(controls);
+      // draw only when something changed: a view that stands still costs nothing
+      let queued = false;
+      const draw = () => { if (queued) return; queued = true;
+        requestAnimationFrame(() => { queued = false; renderer.render(scene, camera); }); };
+      controls.addEventListener('change', draw);
       // the view follows the width of the page, which narrows while the comment panel is open
       new ResizeObserver(() => {
         renderer.setSize(box.clientWidth, box.clientHeight);
         camera.aspect = box.clientWidth / box.clientHeight;
         camera.updateProjectionMatrix();
+        draw();
       }).observe(box);
       const scale = document.getElementById('scale');
       scale.oninput = () => {
         mesh.scale.setScalar(+scale.value);
         document.getElementById('scale-v').value = (+scale.value).toFixed(1);
+        draw();
       };
-      document.getElementById('wire').onchange = e => mesh.material.wireframe = e.target.checked;
-      renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+      document.getElementById('wire').onchange = e => { mesh.material.wireframe = e.target.checked; draw(); };
     </script>
 
 Layout: decide it for each page. What matters most (a 3D model, a plot)
@@ -302,7 +308,11 @@ side by side only when each still has enough room: <div class="pair"> (or a
 "grid") puts two side by side while each gets 560 px, otherwise one above
 the other. A control needs a name only when its value should be handed over
 with Ctrl+Enter. Do not enable damping in OrbitControls: the model must stop
-when the user lets go.
+when the user lets go. Draw only when something changed, as in the example:
+call draw() after each change to the scene. Do not use setAnimationLoop for a
+view that stands still: it draws 60 times a second, and a large model (a
+PCB, an assembly) keeps the author's machine busy and hot. Use it only while
+something moves by itself, and stop it after.
 
 Look at the page before you show it to the author:
 

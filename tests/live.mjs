@@ -534,6 +534,20 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
     && printed?.url === `/live/${printed?.id}/remote.html`, pr.stdout + pr.stderr);
   const none = spawnSync(venv, ['--hc-terminal', 't77', '--print', '--port', String(RP)], { encoding: 'utf8' });
   check('--print for an unknown terminal fails cleanly', none.status === 1 && !none.stdout, none.stdout + none.stderr);
+  // --list and --doc: every page of a terminal, newest first, and one of them by id
+  const ls = spawnSync(venv, ['--hc-terminal', 't1', '--list', '--port', String(SP)], { encoding: 'utf8' });
+  const listed = ls.stdout.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  check('--list prints the pages of the terminal, newest first',
+    ls.status === 0 && listed.length === 2 && listed[0].name === 'page.html' && listed[1].name === 'b.html'
+    && listed[0].time >= listed[1].time && listed.every(d => d.id && d.path && d.live === true && d.port === SP), ls.stdout + ls.stderr);
+  const lsNone = spawnSync(venv, ['--hc-terminal', 't99', '--list', '--port', String(SP)], { encoding: 'utf8' });
+  check('--list for an unknown terminal fails cleanly', lsNone.status === 1 && !lsNone.stdout, lsNone.stdout + lsNone.stderr);
+  h = spawnSync(venv, ['--hc-terminal', 't1', '--doc', ids['b.html'], '--port', String(SP)],
+    { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });
+  check('--doc shows that page and not the latest', h.status === 0 && await focus() === ids['b.html'], h.stderr || h.stdout);
+  h = spawnSync(venv, ['--hc-terminal', 't1', '--doc', ids['c.html'], '--port', String(SP)],
+    { env: { HOME: process.env.HOME, PATH: '/nonexistent', XDG_CACHE_HOME: join(tmp, 'cache') }, encoding: 'utf8' });
+  check('--doc of a page of another terminal fails cleanly', h.status === 1 && !h.stdout, h.stderr);
   const hcm = (term, machine) => spawnSync(venv, ['--hc-terminal', term, '--hc-machine', machine, '--port', String(SP)],
     { env: { HOME: process.env.HOME, PATH: '/usr/bin:/bin', XDG_CONFIG_HOME: conf, XDG_CACHE_HOME: join(tmp, 'cache') },
       encoding: 'utf8', timeout: 60000 });

@@ -34,6 +34,12 @@ Usage
                                  the same for a document (PDF or live page) that
                                  a command on the machine work2 opened there,
                                  shown through ssh
+    just-doc --hc-terminal t12 --list
+                                 print every document of the terminal, newest
+                                 first, one JSON object per line
+    just-doc --hc-terminal t12 --doc ID
+                                 show that document (an id from --list) instead
+                                 of the latest one; also with --hc-machine
     just-doc --guide             print how a coding assistant uses the three
                                  commands above to review a document with you
 """
@@ -1058,16 +1064,29 @@ class Tabs:
             self.version += 1
             self.changed.notify_all()
 
-    def latest(self, terminal):
-        """Return the id of the document from ``terminal`` that was opened or changed last, or None."""
+    def of_terminal(self, terminal):
+        """Return ``[(id, time)]`` of the documents from ``terminal``, newest first.
+
+        The time is when the document was opened or changed last (epoch seconds).
+        """
         def last(key):
             try:
                 return max(self.opened_at.get(key, 0), self.docs[key].stat().st_mtime)
             except OSError:
                 return self.opened_at.get(key, 0)
         with self.changed:
-            keys = [key for key in self.docs if self.terms.get(key) == terminal]
-            return max(keys, key=last, default=None)
+            found = [(key, last(key)) for key in self.docs if self.terms.get(key) == terminal]
+        return sorted(found, key=lambda item: -item[1])
+
+    def latest(self, terminal, key=None):
+        """Return the id of the document from ``terminal`` that was opened or changed last, or None.
+
+        With ``key``: that id, if the document is from ``terminal``, else None.
+        """
+        found = [k for k, _ in self.of_terminal(terminal)]
+        if key is not None:
+            return key if key in found else None
+        return found[0] if found else None
 
     def select(self, key):
         """Show the tab ``key`` in the window."""
@@ -1449,8 +1468,15 @@ def make_handler(tabs):
                 self._send(200, plotly_bundle(), "text/javascript")
             elif route == "/api/latest":
                 # for --hc-terminal --print: the document of a terminal, without showing it
-                terminal = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("t", [""])[0]
-                last = tabs.latest(terminal)
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                terminal = query.get("t", [""])[0]
+                if query.get("list"):
+                    # every document of the terminal, newest first (for --list)
+                    names = {t["id"]: t for t in tabs.listing()["tabs"]}
+                    self._json(200, {"docs": [{**{k: names[key][k] for k in ("id", "name", "path", "live", "file")}, "time": stamp}
+                                              for key, stamp in tabs.of_terminal(terminal) if key in names]})
+                    return
+                last = tabs.latest(terminal, query.get("id", [None])[0])
                 tab = next((t for t in tabs.listing()["tabs"] if t["id"] == last), None)
                 if tab is None:
                     self._json(404, {"error": "no document from this terminal"})
@@ -1572,7 +1598,8 @@ def make_handler(tabs):
                 if self.headers.get("Content-Type") != "application/json":
                     self._json(400, {"error": "JSON expected"})
                     return
-                key = tabs.latest(str(self._body().get("terminal")))
+                body = self._body()
+                key = tabs.latest(str(body.get("terminal")), body.get("id"))
                 if key is None:
                     self._json(404, {"error": "no document from this terminal"})
                     return
@@ -2110,8 +2137,30 @@ def fail(message):
     sys.exit(1)
 
 
-def hc_terminal(terminal, port, window=True, as_print=False):
+def hc_list(terminal, port):
+    """Print every document of the hc terminal ``terminal``, newest first, one JSON object per line.
+
+    Each has id, name, path, live, file, time (epoch seconds) and the port of its
+    just-doc. Exits with status 1 and a short message when there is none.
+    """
+    first = port or PORT
+    found = []
+    for candidate in range(first, first + 20):
+        try:
+            got = ask(f"http://127.0.0.1:{candidate}/api/latest?t={urllib.parse.quote(terminal)}&list=1", timeout=1)
+        except Exception:  # noqa: BLE001
+            continue
+        found += [{**doc, "port": candidate} for doc in got.get("docs", [])]
+    if not found:
+        fail(f"no open document from terminal {terminal}")
+    for doc in sorted(found, key=lambda d: -d["time"]):
+        print(json.dumps(doc, ensure_ascii=False))
+
+
+def hc_terminal(terminal, port, window=True, as_print=False, doc_id=None):
     """Show the document that the hc terminal ``terminal`` opened or changed last, and raise the window.
+
+    With ``doc_id`` show that document of the terminal instead.
 
     With ``as_print`` only print where it is, as JSON: the port of its just-doc
     and its id, name, path, whether it is live, its file time and its address
@@ -2123,12 +2172,13 @@ def hc_terminal(terminal, port, window=True, as_print=False):
         url = f"http://127.0.0.1:{candidate}/"
         try:
             if as_print:
-                got = ask(f"{url}api/latest?t={urllib.parse.quote(terminal)}", timeout=1)
+                got = ask(f"{url}api/latest?t={urllib.parse.quote(terminal)}"
+                          + (f"&id={urllib.parse.quote(doc_id)}" if doc_id else ""), timeout=1)
                 got["url"] = (f"/live/{got['id']}/{urllib.parse.quote(got['name'])}" if got["live"]
                               else f"/view?d={got['id']}")
                 print(json.dumps({"port": candidate, **got}, ensure_ascii=False))
                 return
-            got = ask(url + "api/focus", {"terminal": terminal}, timeout=1)
+            got = ask(url + "api/focus", {"terminal": terminal, **({"id": doc_id} if doc_id else {})}, timeout=1)
         except Exception:  # noqa: BLE001
             continue
         if window and not got["windows"]:
@@ -2137,7 +2187,7 @@ def hc_terminal(terminal, port, window=True, as_print=False):
             raise_window()
         print(f"{got['name']}: {url}")
         return
-    fail(f"no open document from terminal {terminal}")
+    fail(f"no open document {doc_id} from terminal {terminal}" if doc_id else f"no open document from terminal {terminal}")
 
 
 def machine_target(name):
@@ -2182,11 +2232,39 @@ def local_just_doc(port):
     fail("could not start just-doc")
 
 
-def hc_remote(terminal, machine, port, window=True):
+def hc_remote_list(terminal, machine):
+    """Print the documents of the terminal ``terminal`` on the machine ``machine`` (as ``hc_list`` does there), with "machine" added."""
+    try:
+        target, conf = machine_target(machine)
+    except ValueError as exc:
+        fail(str(exc))
+    there = conf.get("just-doc", 'PATH="$HOME/.local/bin:$PATH" just-doc')
+    cmd = ssh_command() + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", target,
+                           f"{there} --hc-terminal {shlex.quote(terminal)} --list"]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        fail(f"ssh {target}: {exc}")
+    if res.returncode == 255:
+        fail(f"ssh {target}: " + (res.stderr.strip().splitlines() or ["failed"])[-1])
+    docs = []
+    for line in res.stdout.splitlines():
+        try:
+            docs.append({**json.loads(line), "machine": machine})
+        except ValueError:
+            continue
+    if not docs:
+        fail(f"no open document from terminal {terminal} on {machine}")
+    for doc in docs:
+        print(json.dumps(doc, ensure_ascii=False))
+
+
+def hc_remote(terminal, machine, port, window=True, doc_id=None):
     """Show the document (live page or PDF) that the hc terminal ``terminal`` of the machine ``machine`` opened or changed last.
 
     The just-doc there is asked over ssh (``--hc-terminal ID --print``); its document
-    comes through an ssh forward into a tab of the window here.
+    comes through an ssh forward into a tab of the window here. With ``doc_id`` it is
+    that document (its id there, from ``--list``) instead of the latest one.
     """
     try:
         target, conf = machine_target(machine)
@@ -2194,7 +2272,8 @@ def hc_remote(terminal, machine, port, window=True):
         fail(str(exc))
     there = conf.get("just-doc", 'PATH="$HOME/.local/bin:$PATH" just-doc')
     cmd = ssh_command() + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", target,
-                           f"{there} --hc-terminal {shlex.quote(terminal)} --print"]
+                           f"{there} --hc-terminal {shlex.quote(terminal)} --print"
+                           + (f" --doc {shlex.quote(doc_id)}" if doc_id else "")]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -2471,6 +2550,10 @@ def main():
                          "shown here through ssh")
     ap.add_argument("--print", dest="as_print", action="store_true",
                     help="with --hc-terminal: only print where the document is, as JSON (exit status 1: none)")
+    ap.add_argument("--list", dest="as_list", action="store_true",
+                    help="with --hc-terminal: print every document of the terminal, newest first, one JSON object per line "
+                         "(id, name, path, live, file, time, port; also machine with --hc-machine; exit status 1: none)")
+    ap.add_argument("--doc", metavar="ID", help="with --hc-terminal: show the document with this id (from --list) instead of the latest one")
     ap.add_argument("--shot", metavar="OUT.png",
                     help="save a picture of an HTML page as it looks live (with its scripts, /_lib/ served), "
                          "for an assistant to check the page before showing it; opens no window")
@@ -2482,10 +2565,15 @@ def main():
         print(GUIDE, end="")
         return
     if args.hc_terminal:
-        if args.hc_machine and not args.as_print:
-            hc_remote(args.hc_terminal, args.hc_machine, args.port, not args.no_window)
+        if args.as_list:
+            if args.hc_machine:
+                hc_remote_list(args.hc_terminal, args.hc_machine)
+            else:
+                hc_list(args.hc_terminal, args.port)
+        elif args.hc_machine and not args.as_print:
+            hc_remote(args.hc_terminal, args.hc_machine, args.port, not args.no_window, args.doc)
         else:
-            hc_terminal(args.hc_terminal, args.port, not args.no_window, args.as_print)
+            hc_terminal(args.hc_terminal, args.port, not args.no_window, args.as_print, args.doc)
         return
     if args.pdf is None:
         if args.reply or args.done or args.wait or args.read or args.export:

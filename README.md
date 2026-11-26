@@ -903,6 +903,17 @@ terminal is open, `just-doc=waiting` while a `--wait` waits for one, and no
 label once its last document is closed or just-doc stops with `q`. An update
 keeps the labels. Without `hc` nothing happens.
 
+To pick among all pages of a terminal, `--list` prints them newest first (the
+time of the last open or change), one JSON object per line with `id`, `name`,
+`path`, `live`, `file`, `time` (epoch seconds) and `port`; `--doc ID` shows one
+of them instead of the latest, also with `--hc-machine`:
+
+```bash
+just-doc --hc-terminal t12 --list
+just-doc --hc-terminal t12 --doc ID
+just-doc --hc-terminal t12 --hc-machine work2 --list   # each line has "machine"
+```
+
 ### Pages of another machine
 
 An agent on another machine (an hc machine reached over ssh) runs
@@ -929,7 +940,7 @@ closed or the window was closed, and when just-doc stops. A PDF (also one
 made from markdown) of the other machine is shown in the viewer here, as a tab
 named `work2: deck.pdf`: the PDF, its comments, the export and Ctrl+Enter go
 to the just-doc there, so a `just-doc deck.pdf --wait` on `work2` gets the
-comments. The just-doc there needs no newer version. With `--hc-machine ""` the terminal is one of this
+comments. For `--list` and `--doc` the just-doc there must be a version that has them. With `--hc-machine ""` the terminal is one of this
 machine, so a key binding can always pass `$HC_FOCUSED_MACHINE`:
 
 ```bash

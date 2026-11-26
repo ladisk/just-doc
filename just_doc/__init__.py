@@ -2390,7 +2390,8 @@ def _start(doc, port, window, live, session, exact, expect=False):
         if (window and has_display()) or expect:
             # a command right after this one counts the window as open while it starts (or connects again)
             tabs.opening = time.monotonic() + 20
-        if window and has_display():
+        # a window of a just-doc that stopped stays open and connects again by itself (restored tabs)
+        if window and has_display() and not (session and raise_window()):
             open_window(url)
         return server, tabs, url
     if exact:

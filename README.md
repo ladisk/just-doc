@@ -514,6 +514,9 @@ assistant writes needs neither the internet nor copies of them:
 /_lib/three/addons/OrbitControls.js    also GLTFLoader.js and STLLoader.js
 /_lib/three/touchpad.js                touchpad(controls): two-finger scroll pans, pinch
                                        zooms, shift + scroll turns; a mouse wheel zooms
+/_lib/three/fast.js                    mergeByMaterial(root, {keep}): a model of thousands of
+                                       meshes in a few draw calls; sharpWhenStill(renderer,
+                                       render): coarse pixels while the view moves
 ```
 
 The three.js add-ons import `three.module.js` by a relative path, so a page
@@ -611,6 +614,18 @@ call draw() after each change to the scene. Do not use setAnimationLoop for a
 view that stands still: it draws 60 times a second, and a large model (a
 PCB, an assembly) keeps the author's machine busy and hot. Use it only while
 something moves by itself, and stop it after.
+
+A model with hundreds of parts or more (CAD, KiCad) is slow, one draw call
+per part. After loading it, and after measuring and finding parts by name,
+merge it with `mergeByMaterial` (one mesh per material, the picture stays the
+same; `keep` names the meshes you still move, pick or recolour). Draw with
+`sharpWhenStill`: coarse pixels while the view moves, sharp when it stops.
+
+```js
+import { mergeByMaterial, sharpWhenStill } from '/_lib/three/fast.js';
+mergeByMaterial(model, { keep: m => moved.has(m) });
+const draw = sharpWhenStill(renderer, () => renderer.render(scene, camera));  // use draw() as in the example
+```
 
 ### Answers from a live page
 

@@ -100,7 +100,7 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   }
   check('unknown live id gives 404', (await fetch(base + '/live/nothing/page.html')).status === 404);
   for (const [p, type] of [['plotly.min.js', 'text/javascript'], ['three/three.module.js', 'text/javascript'],
-                           ['three/addons/OrbitControls.js', 'text/javascript'], ['page.css', 'text/css']]) {
+                           ['three/addons/OrbitControls.js', 'text/javascript'], ['three/fast.js', 'text/javascript'], ['page.css', 'text/css']]) {
     r = await fetch(`${base}/_lib/${p}`);
     check(`/_lib/${p} served as ${type}`, r.status === 200 && r.headers.get('content-type')?.startsWith(type), `${r.status} ${r.headers.get('content-type')}`);
   }
@@ -149,6 +149,38 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('touchpad.js: pinch zooms in by the pinch amount', pad?.pinch === true, JSON.stringify(pad));
   check('touchpad.js: a mouse wheel step is left to OrbitControls and zooms', pad?.wheel === true, JSON.stringify(pad));
   check('touchpad.js: shift + scroll turns the view', pad?.shift === true, JSON.stringify(pad));
+
+  // /_lib/three/fast.js: 500 small meshes with 3 materials become 3 draw calls, the box stays
+  const fast = await ev(`return (async () => {
+    const T = await import('/_lib/three/three.module.js'), { mergeByMaterial, sharpWhenStill } = await import('/_lib/three/fast.js');
+    const mats = [0, 1, 2].map(i => new T.MeshStandardMaterial({ color: i * 0x333333 }));
+    const root = new T.Group(), keepMe = [];
+    for (let i = 0; i < 500; i++) {
+      const g = i % 7 === 0 ? new T.BoxGeometry(1, 1, 1).toNonIndexed() : new T.BoxGeometry(1, 1, 1);
+      if (i % 5 === 0) g.deleteAttribute('uv');
+      const m = new T.Mesh(g, mats[i % 3]);
+      m.position.set(i % 10 * 2, Math.floor(i / 10) % 10 * 2, Math.floor(i / 100) * 2);
+      if (i % 11 === 0) m.scale.x = -1;
+      if (i === 3) keepMe.push(m);
+      if (i % 2) root.add(m); else { const grp = new T.Group(); grp.position.y = 0.5; root.add(grp); grp.add(m); }
+    }
+    root.position.set(5, 6, 7); root.rotation.y = 0.4; root.updateMatrixWorld(true);
+    const pts = o => { const v = []; o.traverse(m => { if (!m.isMesh) return; const p = m.geometry.attributes.position, q = new T.Vector3();
+      for (let i = 0; i < p.count; i++) v.push(q.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld).clone()); }); return new T.Box3().setFromPoints(v); };
+    const b0 = pts(root);
+    const r = mergeByMaterial(root, { keep: m => keepMe.includes(m) });
+    const b1 = pts(root), meshes = []; root.traverse(o => o.isMesh && meshes.push(o));
+    const out = { before: r.before, after: r.after, kept: keepMe[0].parent !== null, meshes: meshes.length,
+      same: b0.min.distanceTo(b1.min) < 1e-4 && b0.max.distanceTo(b1.max) < 1e-4 };
+    // winding agrees with the normals everywhere, mirrored boxes included
+    out.winding = meshes.filter(m => m !== keepMe[0]).every(m => { const g = m.geometry, p = g.attributes.position, n = g.attributes.normal, x = g.index.array;
+      const a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3(), nn = new T.Vector3();
+      for (let i = 0; i < x.length; i += 3) { a.fromBufferAttribute(p, x[i]); b.fromBufferAttribute(p, x[i + 1]); c.fromBufferAttribute(p, x[i + 2]);
+        nn.fromBufferAttribute(n, x[i]); if (b.sub(a).cross(c.sub(a)).dot(nn) <= 0) return false; } return true; });
+    out.sharp = typeof sharpWhenStill === 'function';
+    return out; })()`);
+  check('fast.js: 500 meshes, 3 materials merge (before 500, few after)', fast?.before === 500 && fast?.after >= 3 && fast?.after <= 12 && fast.after === fast.meshes, JSON.stringify(fast));
+  check('fast.js: the bounding box and winding are right, a kept mesh stays', fast?.same === true && fast?.winding === true && fast?.kept === true && fast?.sharp === true, JSON.stringify(fast));
 
   // Plotly follows light and dark (plotly-theme.js, served with plotly.min.js); a page's own colours win
   const look = () => ev(`const L=d.getElementById('plot')._fullLayout, M=d.getElementById('plot2')._fullLayout;

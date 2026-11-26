@@ -233,6 +233,9 @@ These are served by just-doc; use them instead of the internet:
     /_lib/three/touchpad.js                touchpad(controls): two-finger scroll pans, pinch
                                            zooms, shift + scroll turns; a mouse wheel zooms;
                                            use it with every OrbitControls
+    /_lib/three/fast.js                    mergeByMaterial(root, {keep}): a model of thousands of
+                                           meshes in a few draw calls; sharpWhenStill(renderer,
+                                           render): coarse pixels while the view moves
 
 A plot:
 
@@ -313,6 +316,15 @@ call draw() after each change to the scene. Do not use setAnimationLoop for a
 view that stands still: it draws 60 times a second, and a large model (a
 PCB, an assembly) keeps the author's machine busy and hot. Use it only while
 something moves by itself, and stop it after.
+
+A model with hundreds of parts or more (CAD, KiCad) is slow, one draw call
+per part: after loading, and after measuring and finding parts by name,
+merge it with mergeByMaterial, and draw with sharpWhenStill (coarse pixels
+while the view moves, sharp when it stops):
+
+    import { mergeByMaterial, sharpWhenStill } from '/_lib/three/fast.js';
+    mergeByMaterial(model, { keep: m => moved.has(m) });  // one mesh per material; keep: meshes you still move, pick or recolour
+    const draw = sharpWhenStill(renderer, () => renderer.render(scene, camera));  // use draw() as in the example
 
 Look at the page before you show it to the author:
 

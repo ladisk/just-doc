@@ -7,6 +7,12 @@
 // comment is placed by the id first, then by the quote, then by the CSS path; one that cannot be
 // placed is marked detached and stays in the list.
 //
+// A comment can also be pinned to a point on the surface of a model in a <jd-scene> (scene.js in
+// /_lib/three/): its anchor is the element, with anchor.scene = {part, point, normal, units}. The element
+// draws the numbered markers; this file gives it the comments (setMarks), asks it for the point under
+// the pointer (pick), has it show a selected point that is out of sight (reveal) and hears a click on a
+// marker (jd-mark).
+//
 // What changed (m, M), the page as it was (gb) and the history of the rounds (gh) work on the text the
 // reader sees, word by word: the words of the page now against the words at the last hand-over (kept
 // by the server with every Ctrl+Enter) or at the last commit.
@@ -675,10 +681,31 @@ const LIVE = (() => {
     return false;
   }
 
+  // the <jd-scene> of a comment that is pinned to a point of its model, and the text for that point
+  const sceneOf = (st, a) => { const el = a.anchor?.scene && st.where?.[a.id]?.el; return el && typeof el.setMarks === 'function' ? el : null; };
+  const pinned = (st, a) => { const sc = sceneOf(st, a); return sc && sc.markRect(a.id) ? sc : null; };
+  const num = v => Number(Number(v).toPrecision(4));
+  const sceneText = s => `part: ${s.part || '?'} · at (${(s.point || []).map(num).join(', ')})${s.units ? ' ' + s.units : ''}`;
+
+  // the markers of the comments go to the 3D views, which draw them
+  function sceneMarks(st) {
+    const by = new Map();
+    for (const sc of st.f.contentDocument.querySelectorAll('jd-scene')) if (typeof sc.setMarks === 'function') by.set(sc, []);
+    for (const a of marked(st)) {
+      const sc = sceneOf(st, a);
+      if (sc && by.has(sc)) by.get(sc).push({ id: a.id, n: a.n ?? '+', state: standing(st, a)[0], selected: a.id === st.sel,
+                                              point: a.anchor.scene.point, normal: a.anchor.scene.normal });
+    }
+    for (const [sc, list] of by) sc.setMarks(list);
+  }
+
   // the places of a comment on the page, in page coordinates
   function rectsOf(st, a) {
     const loc = st.where?.[a.id], w = st.f.contentWindow;
     if (!loc) return [];
+    // a point of a 3D view: the marker, where it is on the screen
+    const m = pinned(st, a)?.markRect(a.id);
+    if (m) return [{ l: m.left + w.scrollX, t: m.top + w.scrollY, w: m.width, h: m.height }];
     return [...(loc.range ? loc.range.getClientRects() : [loc.el.getBoundingClientRect()])]
       .filter(r => r.width > 0 || r.height > 0).map(r => ({ l: r.left + w.scrollX, t: r.top + w.scrollY, w: r.width, h: r.height }));
   }
@@ -691,7 +718,9 @@ const LIVE = (() => {
     if (!doc?.documentElement) return;
     const layer = layerOf(st), hl = layer.querySelector('#__jd_hl'), dots = layer.querySelector('#__jd_dots');
     let html = '', dot = '';
+    sceneMarks(st);
     for (const a of marked(st)) {
+      if (pinned(st, a)) continue;   // its marker is in the 3D view
       const rects = rectsOf(st, a);
       if (!rects.length) continue;
       const loc = st.where[a.id], on = a.id === st.sel;
@@ -728,7 +757,7 @@ const LIVE = (() => {
     let best = null;
     for (const a of marked(st)) {
       const loc = st.where?.[a.id];
-      if (!loc) continue;
+      if (!loc || pinned(st, a)) continue;
       for (const r of rectsOf(st, a)) {
         const inside = loc.range ? near(r, 0) : near(r, 3) && !(r.w > 24 && r.h > 24 && near({ l: r.l + 8, t: r.t + 8, w: r.w - 16, h: r.h - 16 }, 0));
         const at = a.anchor?.at, dot = loc.el && at && near({ l: r.l + at[0] * r.w - 6, t: r.t + at[1] * r.h - 6, w: 12, h: 12 }, 0);
@@ -780,6 +809,7 @@ const LIVE = (() => {
     h.append(t);
     if (!a && !sub.it.near) h.append(' ', el(doc, 'b', 'not asked for'));
     c.append(h);
+    if (a?.anchor?.scene) c.append(el(doc, 'div', sceneText(a.anchor.scene), 'yours'));
     if (a && !writing) {
       const y = el(doc, 'div', '', 'yours');
       y.append(el(doc, 'b', 'you: '), a.comment || '(no comment)');
@@ -893,7 +923,7 @@ const LIVE = (() => {
         + (unfolded(st, a) ? ' open' : '') + (isNew(st, a) ? ' new' : '');
       it.dataset.id = a.id;
       // a closed row is two lines: where the comment stands, its place and text; and who spoke last
-      const [key, word] = standing(st, a), quote = (a.text || '').replace(/\s+/g, ' '), tag = '‹' + (a.anchor?.tag || 'element') + '›';
+      const [key, word] = standing(st, a), quote = (a.text || '').replace(/\s+/g, ' '), tag = a.anchor?.scene ? sceneText(a.anchor.scene) : '‹' + (a.anchor?.tag || 'element') + '›';
       const where = (a.anchor?.id ? '#' + a.anchor.id : a.anchor?.src || a.anchor?.tag || '') + (a.anchor?.src && a.anchor?.id ? ' · ' + a.anchor.src : '');
       const l1 = document.createElement('div'); l1.className = 'l1';
       l1.append(span('span', word, 'st ' + key), span('b', '#' + (a.n ?? '…')), span('span', where + (a.detached ? ' · not found on the page' : ''), 'wh'));
@@ -1120,6 +1150,9 @@ const LIVE = (() => {
     if (scroll && loc) {
       const e = loc.el || elementOf(loc.range.startContainer);
       e.scrollIntoView({ block: 'center', behavior: 'instant' });
+      // a point of a 3D view that is out of sight is brought into view; one that is seen stays where it is
+      const a = st.annots.find(x => x.id === id), sc = a && sceneOf(st, a);
+      if (sc) { sceneMarks(st); sc.reveal(id); }
     }
     draw();
   }
@@ -1142,6 +1175,12 @@ const LIVE = (() => {
     const p = st.pointer;
     let e = p && doc.elementFromPoint(p.x, p.y);
     if (e?.closest('#__jd_marks')) e = null;
+    // the model of a 3D view: the point of its surface under the mouse
+    const sc = e?.closest('jd-scene');
+    if (sc && typeof sc.pick === 'function' && e.localName === 'canvas') {
+      const at = sc.pick(p.x, p.y);
+      if (at) { const anchor = anchorOf(doc, sc, '', '', ''); anchor.scene = at; newComment(st, 'element', '', anchor); return; }
+    }
     // the element with an id (or data-src) around it: a section, a figure, a plot, which stays when its inside is drawn again
     const k = e && keyed(e);
     if (k && k !== doc.body && k !== doc.documentElement) e = k;
@@ -1419,6 +1458,10 @@ const LIVE = (() => {
     w.addEventListener('mousemove', e => st.pointer = { x: e.clientX, y: e.clientY }, true);
     w.addEventListener('resize', () => marks(st));
     w.addEventListener('click', e => hit(st, e), true);
+    // the 3D views: a click on a marker, a changed picture (the card follows its marker), a view that was built
+    w.addEventListener('jd-mark', e => { if (e.detail?.id) select(st, e.detail.id, false); });
+    w.addEventListener('jd-view', () => marks(st));
+    w.addEventListener('jd-ready', () => marks(st));
     await Promise.all([load(st), loadRounds(st)]);
     // on the first run everything that is there counts as looked at
     if (!st.looked) {

@@ -517,6 +517,11 @@ assistant writes needs neither the internet nor copies of them:
 /_lib/three/fast.js                    mergeByMaterial(root, {keep}): a model of thousands of
                                        meshes in a few draw calls; sharpWhenStill(renderer,
                                        render): coarse pixels while the view moves
+/_lib/three/scene.js                   <jd-scene>: a viewer of one or more parts (STL, STEP,
+                                       GLB) with part list, views and section plane; the
+                                       author can comment on a point of the surface
+/_lib/occt/                            the STEP reader (occt-import-js) that scene.js loads
+                                       by itself
 ```
 
 The three.js add-ons import `three.module.js` by a relative path, so a page
@@ -538,20 +543,62 @@ needs no import map. A plot:
 </script>
 ```
 
-and a model that turns with the mouse, with its controls above it:
+and a model, in a `<jd-scene>` (STL, STEP or GLB files next to the page, one or
+several parts):
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Bracket</title>
+<link rel="stylesheet" href="/_lib/page.css">
+<script type="module" src="/_lib/three/scene.js"></script>
+<h1>Bracket</h1>
+<jd-scene id="bracket">
+  <script type="application/json">
+  {"parts": [{"src": "housing.stl"},
+             {"src": "cover.step", "colour": "#e15759", "opacity": 0.7}],
+   "units": "mm"}
+  </script>
+</jd-scene>
+<p>What the view shows and what to look at.</p>
+```
+
+The element shows a bar above the view (view buttons iso, top, front, side,
+reset and fit; a section plane X, Y or Z with a slider and a flip; the size of
+the shown parts), the part list (checkbox, colour and opacity for each part
+and each group) and the view, as wide as the page. It follows light and dark,
+navigates as `touchpad()` does, draws only when something changed, merges the
+meshes of a part when there are many, and loads the parts in parallel; a part
+that fails shows its error in its row. Give it an `id`. The config is read once, so
+save the page to change it:
+
+| key | meaning |
+|---|---|
+| `parts` | the parts, at least one; each has: |
+| `src` | `.stl`, `.step`, `.stp` or `.glb` file, next to the page |
+| `name`, `group` | the name in the list (default: the file name); parts with the same group are a folder |
+| `colour`, `opacity` | a hex colour such as `#e15759` (STEP and GLB colours are used without it), 0 to 1 |
+| `visible` | `false`: not loaded until the author shows it |
+| `split` | STEP only: one part for each solid, named from the file |
+| `units` | `"mm"`, shown with the size and the section |
+| `height` | pixels; default: the class `view` of `page.css` |
+| `up` | `"z"` (default) or `"y"`; GLB files are Y-up |
+| `src` (top level) | a `.json` file with these keys instead of the script |
+
+Write three.js yourself only for what the element cannot do: a scene that
+you build in code (a mesh, a field, a plot in 3D) or an animation of your own.
+A model that turns with the mouse, with its controls above it:
 
 ```html
 <!doctype html>
 <meta charset="utf-8">
 <title>Part</title>
 <link rel="stylesheet" href="/_lib/page.css">
-<h1>Bracket</h1>
+<h1>Torus knot</h1>
 <div class="controls">
-  <label>Scale <input id="scale" type="range" min="0.2" max="2" step="0.1" value="1"> <output id="scale-v">1.0</output></label>
   <label><input id="wire" type="checkbox" class="toggle"> wireframe</label>
 </div>
 <div id="view" class="view"></div>
-<p>What the view shows and what to look at.</p>
 <script type="module">
   import * as THREE from '/_lib/three/three.module.js';
   import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
@@ -578,12 +625,6 @@ and a model that turns with the mouse, with its controls above it:
     camera.updateProjectionMatrix();
     draw();
   }).observe(box);
-  const scale = document.getElementById('scale');
-  scale.oninput = () => {
-    mesh.scale.setScalar(+scale.value);
-    document.getElementById('scale-v').value = (+scale.value).toFixed(1);
-    draw();
-  };
   document.getElementById('wire').onchange = e => { mesh.material.wireframe = e.target.checked; draw(); };
 </script>
 ```
@@ -615,8 +656,8 @@ view that stands still: it draws 60 times a second, and a large model (a
 PCB, an assembly) keeps the author's machine busy and hot. Use it only while
 something moves by itself, and stop it after.
 
-A model with hundreds of parts or more (CAD, KiCad) is slow, one draw call
-per part. After loading it, and after measuring and finding parts by name,
+Your own three.js with hundreds of parts or more (CAD, KiCad) is slow, one
+draw call per part (`<jd-scene>` merges the meshes of a part by itself). After loading it, and after measuring and finding parts by name,
 merge it with `mergeByMaterial` (one mesh per material, the picture stays the
 same; `keep` names the meshes you still move, pick or recolour). Draw with
 `sharpWhenStill`: coarse pixels while the view moves, sharp when it stops.
@@ -678,7 +719,9 @@ that machine, where its agent runs `--wait`.
 
 A live page is commented as a PDF is, and its plots and models keep working.
 Select text and press `a`, or point at an element with the mouse (a plot, a
-figure, a table) and press `a`. The comments are listed in a panel at the
+figure, a table) and press `a`. With the mouse over the model of a
+`<jd-scene>`, `a` pins the comment to the point of its surface under the
+mouse (see "A comment on a 3D model" below). The comments are listed in a panel at the
 right of the window; the page narrows to make room and keeps its own layout.
 On the page they are marked over it in the colours of the PDF viewer: selected
 text is yellow (orange with a comment), an element is outlined in orange with a
@@ -692,7 +735,7 @@ comment leaves the list and the page at the next `Ctrl` `Enter`.
 
 | key (outside a text field) | action |
 |---|---|
-| `a` | comment on the selected text, or on the element under the mouse; on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply; on the card of a change: comment on the change |
+| `a` | comment on the selected text, or on the element under the mouse (over a 3D model: on the surface point under the mouse); on the selected comment: edit what you wrote last while the assistant has not seen it, after that reply; on the card of a change: comment on the change |
 | `Enter` / `Shift` `Enter` / `Esc` | in the comment field: save / new line / cancel |
 | `x` | mark the selected comment done; again opens it |
 | `za` / `zR` / `zM` | open or close the row of the selected comment in the list / open all rows / close all rows |
@@ -745,6 +788,36 @@ assistant knows where to change it.
 
 The hand-over times (`/api/rounds`) are those of the `Ctrl` `Enter` presses,
 kept in `page.answers.json`.
+
+#### A comment on a 3D model
+
+With the mouse over the model of a `<jd-scene>`, `a` makes a comment pinned to
+the point of the surface under the mouse. The anchor is the element, as for
+any element (its `id`), with the point added:
+
+```json
+"anchor": {"id": "bracket", "...": "...",
+           "scene": {"part": "housing", "point": [12.3, 4.5, 8.0],
+                     "normal": [0, 0, 1], "units": "mm"}}
+```
+
+`part` is the name in the part list, `point` is in the units of the model
+files and `normal` is the direction the surface faces. The model draws a
+numbered marker at the point, in the colour of the state of the comment (as the
+status word in the list); the marker is tested against the depth of the model,
+so a point behind it is hidden, and it follows when the view turns. A click on
+a marker selects its comment. Selecting a comment in any other way (`n`, `p`, a
+click in the list) turns the view to look at the point along its normal only
+when the point is off the screen, behind the model or on its far side; a point
+that is seen does not move the view. After the page is loaded again the
+markers are placed again from the anchors. `--read` and `--wait` print such a
+comment as
+
+```text
+[4] #bracket  part: housing  at (12.3, 4.5, 8) mm
+    surface: a point on the surface of a 3D model, normal (0, 0, 1)
+    comment: this edge is too sharp
+```
 
 ### What changed on a live page
 
@@ -879,6 +952,15 @@ password (a key in the agent).
 
 `web/pdfjs/` is a copy of [PDF.js](https://mozilla.github.io/pdf.js/) 4.10.38
 (Apache License 2.0, see `web/pdfjs/LICENSE`).
+
+`web/_lib/three/scene.js` (`<jd-scene>`) is derived from `<canvas-scene>` of
+agent-canvas by Tibor Barši Palmić (MIT): the loading of STL, STEP and GLB, the
+part list, the views and the section plane are his; the header of the file says
+what changed. `web/_lib/occt/` is [occt-import-js](https://github.com/kovacsv/occt-import-js)
+0.0.23 (LGPL 2.1; it contains Open CASCADE Technology, also LGPL 2.1), the
+STEP reader, taken from the npm package with its licences in `web/_lib/licenses/`
+(`occt-import-js.LICENSE`, `occt.LICENSE`). The 7.6 MB `.wasm` file is loaded only
+when a page shows a STEP file.
 
 `web/_lib/plotly.min.js` is [Plotly](https://plotly.com/javascript/) 4.1.2 (MIT)
 and `web/_lib/three/` is [three.js](https://threejs.org) r186 (0.186.1, MIT),

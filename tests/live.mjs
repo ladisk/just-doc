@@ -1,6 +1,6 @@
 // Test of live pages (--live), /_lib/ and --hc-terminal in headless Chromium. See tests/README.md.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync, existsSync, copyFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -26,6 +26,13 @@ const check = (name, ok, info = '') => {
 const raw = path => new Promise((resolve, reject) => {
   const s = connect(SP, '127.0.0.1', () => s.write(`GET ${path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n`));
   let out = ''; s.on('data', c => out += c); s.on('end', () => resolve(out)); s.on('error', reject);
+});
+
+// the first lines of an answer only (a big file is not read to the end)
+const firstLines = path => new Promise((resolve, reject) => {
+  const s = connect(SP, '127.0.0.1', () => s.write(`GET ${path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n`));
+  let out = ''; s.on('data', c => { out += c.toString('latin1'); if (out.includes('\r\n\r\n')) { s.destroy(); resolve(out.split('\r\n\r\n')[0]); } });
+  s.on('error', reject);
 });
 
 const tmp = mkdtempSync(join(tmpdir(), 'just-doc-live-'));
@@ -100,15 +107,16 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   }
   check('unknown live id gives 404', (await fetch(base + '/live/nothing/page.html')).status === 404);
   for (const [p, type] of [['plotly.min.js', 'text/javascript'], ['three/three.module.js', 'text/javascript'],
-                           ['three/addons/OrbitControls.js', 'text/javascript'], ['three/fast.js', 'text/javascript'], ['page.css', 'text/css']]) {
-    r = await fetch(`${base}/_lib/${p}`);
-    check(`/_lib/${p} served as ${type}`, r.status === 200 && r.headers.get('content-type')?.startsWith(type), `${r.status} ${r.headers.get('content-type')}`);
+                           ['three/addons/OrbitControls.js', 'text/javascript'], ['three/fast.js', 'text/javascript'], ['three/scene.js', 'text/javascript'],
+                           ['occt/occt-import-js.js', 'text/javascript'], ['occt/occt-import-js.wasm', 'application/wasm'], ['page.css', 'text/css']]) {
+    const lines = await firstLines(`/_lib/${p}`);
+    check(`/_lib/${p} served as ${type}`, /^HTTP\/1\.\d 200/.test(lines) && new RegExp(`^content-type: ${type}`, "mi").test(lines), lines.replace(/\r\n/g, ' | '));
   }
 
   // 4. the window in headless Chromium
   const bin = ['chromium', 'google-chrome-stable', 'google-chrome', 'brave'].find(has);
   if (!bin) throw new Error('no chromium/chrome/brave found');
-  procs.push(spawn(bin, ['--headless=new', '--disable-gpu', `--user-data-dir=${join(tmp, 'chr')}`,
+  procs.push(spawn(bin, ['--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${join(tmp, 'chr')}`,
     `--remote-debugging-port=${CP}`, '--window-size=1200,800', 'about:blank'], { stdio: 'ignore' }));
   const target = await until(async () => (await (await fetch(`http://127.0.0.1:${CP}/json`)).json()).find(x => x.type === 'page'), 15000);
   if (!target) throw new Error('chromium did not start');
@@ -592,6 +600,80 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   check('the remote PDF opens in the viewer here', !!(await top(`const f=[...document.querySelectorAll('iframe')].find(f=>f.src.includes('view?d=${ptab?.id}')); return !!f`)));
   h = hcm('t77', 'fake');
   check('--hc-machine for an unknown terminal fails cleanly', h.status === 1 && /no open document/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr}`);
+
+  // 8. <jd-scene>: a model of two parts (STL and STEP), a comment pinned to a point of its surface
+  copyFileSync(join(repo, 'tests', 'data', 'part.stl'), join(site, 'housing.stl'));
+  copyFileSync(join(repo, 'tests', 'data', 'box.step'), join(site, 'cover.step'));
+  const sceneDoc = join(site, 'scene.html');
+  writeFileSync(sceneDoc, `<!doctype html><meta charset="utf-8"><title>scene</title>
+<link rel="stylesheet" href="/_lib/page.css"><script type="module" src="/_lib/three/scene.js"></script>
+<h1>Scene</h1>
+<jd-scene id="bracket"><script type="application/json">{"parts": [{"src": "housing.stl", "name": "housing"},
+  {"src": "cover.step", "name": "cover", "colour": "#e15759", "opacity": 0.7}], "units": "mm", "height": 420}</script></jd-scene>
+<p id="after">after the model</p>`);
+  utimesSync(sceneDoc, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
+  run('t7', sceneDoc, '--live');
+  const S = e => ev(`const sc = d.querySelector('jd-scene'); if (!sc) return null; ${e}`);
+  const here = await until(() => S(`return sc.dataset.state`), 20000);
+  check('jd-scene is defined and builds its view', here === 'loading' || here === 'ready', String(here));
+  const state = await until(() => S(`return sc.dataset.state === 'ready' || sc.dataset.state === 'error' ? sc.dataset.state : null`), 40000);
+  const infos = await S(`return sc.partInfo()`);
+  check('an STL part and a STEP part load (parallel, in the list)', state === 'ready' && infos?.length === 2 && infos.every(p => p.status === 'ready')
+    && infos[0].name === 'housing' && infos[1].name === 'cover' && infos[1].colour === '#e15759', JSON.stringify([state, infos]));
+  check('the part list, the view buttons and the section are above the view', !!(await S(`const k = [...sc.children].filter(c => c.localName !== 'script').map(c => c.className); return k[0].includes('controls') && k[1].includes('jd-parts') && k[2].includes('view') && sc.querySelectorAll('.jd-row').length === 2`)));
+  check('the canvas is drawn (not empty)', !!(await S(`const c = sc.querySelector('canvas'), g = document.createElement('canvas'); g.width = c.width; g.height = c.height;
+    const x = g.getContext('2d'); x.drawImage(c, 0, 0); const px = x.getImageData(0, 0, g.width, g.height).data; const first = px.slice(0, 4).join();
+    for (let i = 0; i < px.length; i += 4) if (px.slice(i, i + 4).join() !== first) return true; return false`)));
+  // the point under the pointer: the middle of the view
+  const mid = await S(`const r = sc.querySelector('canvas').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]`);
+  await ev(`w.dispatchEvent(new w.MouseEvent('mousemove', {clientX: ${mid[0]}, clientY: ${mid[1]}, bubbles: true})); return 1`);
+  const picked = await S(`return sc.pick(${mid[0]}, ${mid[1]})`);
+  check('pick gives part, point and normal in model units', !!picked && ['housing', 'cover'].includes(picked.part) && picked.point.length === 3
+    && picked.normal.length === 3 && picked.units === 'mm', JSON.stringify(picked));
+  await press('a');
+  await typeIn('what is this edge?');
+  const sceneFile = join(site, 'scene.live.comments.json');
+  const sc1 = await until(() => stored(sceneFile).find(a => a.comment === 'what is this edge?'), 8000);
+  check('a over the model saves a comment with the point of the surface', sc1?.anchor?.id === 'bracket' && sc1.anchor.scene?.point?.length === 3
+    && sc1.anchor.scene.normal?.length === 3 && ['housing', 'cover'].includes(sc1.anchor.scene.part) && sc1.anchor.scene.units === 'mm', JSON.stringify(sc1));
+  const rect = await until(() => S(`return sc.markRect('${sc1?.id}')`), 5000);
+  check('the model draws its marker', !!rect, JSON.stringify(rect));
+  check('the card stands beside the marker, and no outline is drawn round the whole view', !!(await ev(`const c = d.querySelector('#__jd_card .card'); if (!c) return false;
+    const r = c.getBoundingClientRect(), m = ${JSON.stringify(rect)}; return d.querySelectorAll('#__jd_hl .m').length === 0 && Math.abs(r.top - m.top) < 400 && (r.left > m.left + m.width || r.top > m.top + m.height || r.bottom < m.top)`)));
+  await shot('6-scene-comment.png');
+  // a click on the marker selects the comment; one on an empty place does not
+  await press('Escape');
+  check('Escape closes the card', !(await ev(`return !!d.querySelector('#__jd_card .card')`)));
+  const click = (x, y) => S(`const c = sc.querySelector('canvas'); for (const t of ['pointerdown', 'pointerup']) c.dispatchEvent(new w.PointerEvent(t, {clientX: ${x}, clientY: ${y}, bubbles: true, pointerId: 1})); return 1`);
+  await click(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  check('a click on the marker selects its comment', !!(await until(() => top(`return document.querySelector('.it.on')?.dataset.id === '${sc1?.id}'`), 3000)));
+  // the list row names the part and the point; --read prints them
+  check('the list row names the part and the point', await top(`return /part: (housing|cover) · at \\(/.test(document.querySelector('.it.on .l1').textContent)`));
+  const rs = run('t7', sceneDoc, '--live', '--read');
+  check('--live --read prints the part and the point', rs.status === 0 && /\[1\] #bracket  part: (housing|cover)  at \([-\d., e]+\) mm/.test(rs.stdout), rs.stdout + rs.stderr);
+  // a selected comment turns the view only when its point is out of sight
+  const cam = () => S(`return sc.camera.position.toArray().map(v => Math.round(v * 100) / 100).join()`);
+  const camBefore = await cam();
+  await top(`document.querySelector('.it[data-id="${sc1?.id}"]').click(); return 1`);
+  check('selecting a comment whose point is seen does not move the view', (await cam()) === camBefore);
+  await S(`const n = sc._marks[0].normal, p = sc.controls.target.clone();
+    sc.camera.position.set(p.x - n[0] * 200, p.y - n[1] * 200, p.z - n[2] * 200); sc.controls.update(); sc.draw(); return 1`);
+  const hidden = await S(`return !sc.markRect(sc._marks[0].id) || sc._hidden(sc._marks[0].point)`);
+  await top(`document.querySelector('.it[data-id="${sc1?.id}"]').click(); return 1`);
+  await sleep(300);
+  check('a point on the far side is brought into view', !!hidden && await S(`const m = sc._marks[0], r = sc.markRect(m.id); return !!r && !sc._hidden(m.point)`));
+  await shot('7-scene-turned.png');
+  // the section plane cuts the model; a marker on the cut-away side is not drawn
+  await S(`sc.querySelector('[aria-label="Section plane X"]').click(); return 1`);
+  await sleep(400);
+  check('a section plane shows its slider and value', await S(`return !sc.querySelector('.jd-sec').hidden && /^X = /.test(sc.querySelector('.jd-val').textContent) && sc.renderer.clippingPlanes.length === 1`));
+  await shot('8-scene-section.png');
+  await S(`sc.querySelector('[aria-label="Section off"]').click(); return 1`);
+  // the markers come back after the page is loaded again
+  writeFileSync(sceneDoc, readFileSync(sceneDoc, 'utf8').replace('after the model', 'after the model, changed'));
+  utimesSync(sceneDoc, new Date(Date.now() - 2000), new Date(Date.now() - 2000));
+  check('after a reload the marker is drawn again', !!(await until(() => S(`return d.getElementById('after').textContent.includes('changed') && sc.dataset.state === 'ready' && sc._marks.length === 1 && !!sc.markRect('${sc1?.id}')`), 30000)));
+
   check('no uncaught exceptions', excs.length === 0, excs[0]);
 } catch (e) {
   check('test run', false, e.stack || String(e));

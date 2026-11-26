@@ -20,8 +20,11 @@ the JSON format, export and the LaTeX source lookup.
   2.0). Do not edit it.
 - `just_doc/web/_lib/` — served at `/_lib/` for pages shown with `--live`:
   copies of Plotly 4.1.2 and three.js r186 (MIT, licences in `licenses/`; only
-  the three.js add-on imports were made relative), and our own `page.css`,
-  `plotly-theme.js`, `three/touchpad.js` and `three/fast.js`.
+  the three.js add-on imports were made relative), `occt/` (occt-import-js
+  0.0.23, the STEP reader, LGPL, 7.6 MB `.wasm`; its licences in `licenses/`),
+  and our own `page.css`, `plotly-theme.js`, `three/touchpad.js`,
+  `three/fast.js` and `three/scene.js` (`<jd-scene>`, derived from
+  agent-canvas, MIT; `live.js` pins comments to its surface points).
 - `pyproject.toml` — packaging; built with hatchling.
 
 ## Design

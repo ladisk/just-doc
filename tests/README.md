@@ -25,7 +25,10 @@ removed element giving a detached comment, and a comment and a reply on the
 page of the "other machine". What changed on a live page: a hand-over, an edit of the
 text, `m` with its marks, cards and list rows, `a` on a change and on removed text,
 `gb`, `gh` and `M` against a commit in a temporary git repository (set `SHOTS` to a
-folder to save screenshots). A PDF of the "other machine" is shown here, its
+folder to save screenshots). `<jd-scene>`: an STL and a STEP part (`tests/data/`) load,
+`a` over the model saves a comment with the part and the point, the marker is drawn, a
+click on it selects the comment, `--read` prints the point, and a point out of sight is
+brought into view only then. A PDF of the "other machine" is shown here, its
 comments are saved there and Ctrl+Enter ends its `--wait`.
 For `--hc-machine` it starts a second just-doc on port 8963 as the "other
 machine" and reaches it through `tests/fake-ssh.py` (named in a config file in

@@ -236,6 +236,12 @@ These are served by just-doc; use them instead of the internet:
     /_lib/three/fast.js                    mergeByMaterial(root, {keep}): a model of thousands of
                                            meshes in a few draw calls; sharpWhenStill(renderer,
                                            render): coarse pixels while the view moves
+    /_lib/three/scene.js                   <jd-scene>: a viewer of one or more parts (STL, STEP,
+                                           GLB) with part list, views and section plane, in
+                                           which the author can comment on a point of the
+                                           surface; see "A model" below
+    /_lib/occt/                            the STEP reader (occt-import-js) that scene.js loads
+                                           by itself; a page does not use it
 
 A plot:
 
@@ -253,19 +259,48 @@ A plot:
         yaxis: {type: 'log', title: {text: '|H|'}}}, {responsive: true});
     </script>
 
-A model that turns with the mouse, with its controls above it:
+A model (STL, STEP or GLB files, one or several parts): use <jd-scene>. It
+has the part list (checkbox, colour, opacity), the views (iso, top, front,
+side), a section plane, touchpad navigation, the full width, light and dark,
+and the author can comment on a point of the surface (see below). Parts load
+in parallel and show as they arrive. The files are next to the page:
+
+    <!doctype html>
+    <meta charset="utf-8">
+    <title>Bracket</title>
+    <link rel="stylesheet" href="/_lib/page.css">
+    <script type="module" src="/_lib/three/scene.js"></script>
+    <h1>Bracket</h1>
+    <jd-scene id="bracket">
+      <script type="application/json">
+      {"parts": [{"src": "housing.stl"},
+                 {"src": "cover.step", "colour": "#e15759", "opacity": 0.7}],
+       "units": "mm"}
+      </script>
+    </jd-scene>
+    <p>What the view shows and what to look at.</p>
+
+Give it an id. Config: parts (at least one) with, for each, src (.stl, .step,
+.stp or .glb), name (default: the file name), group (a folder in the list),
+colour (hex; STEP and GLB colours are used without it), opacity (0 to 1),
+visible (false: not loaded until the author shows it), split (STEP only: one
+part per solid); units ("mm", shown with the size and the section); height
+(pixels; default: the class view of page.css); up ("z" default, or "y"; GLB
+files are Y-up); src (a .json file with these keys instead of the script).
+The config is read once: save the page to change it. The comments need the
+element only; nothing else to do. Write three.js yourself only for what it
+cannot do: a scene you build in code (a mesh, a field, a plot in 3D) or an
+own animation:
 
     <!doctype html>
     <meta charset="utf-8">
     <title>Part</title>
     <link rel="stylesheet" href="/_lib/page.css">
-    <h1>Bracket</h1>
+    <h1>Torus knot</h1>
     <div class="controls">
-      <label>Scale <input id="scale" type="range" min="0.2" max="2" step="0.1" value="1"> <output id="scale-v">1.0</output></label>
       <label><input id="wire" type="checkbox" class="toggle"> wireframe</label>
     </div>
     <div id="view" class="view"></div>
-    <p>What the view shows and what to look at.</p>
     <script type="module">
       import * as THREE from '/_lib/three/three.module.js';
       import { OrbitControls } from '/_lib/three/addons/OrbitControls.js';
@@ -292,12 +327,6 @@ A model that turns with the mouse, with its controls above it:
         camera.updateProjectionMatrix();
         draw();
       }).observe(box);
-      const scale = document.getElementById('scale');
-      scale.oninput = () => {
-        mesh.scale.setScalar(+scale.value);
-        document.getElementById('scale-v').value = (+scale.value).toFixed(1);
-        draw();
-      };
       document.getElementById('wire').onchange = e => { mesh.material.wireframe = e.target.checked; draw(); };
     </script>
 
@@ -317,10 +346,11 @@ view that stands still: it draws 60 times a second, and a large model (a
 PCB, an assembly) keeps the author's machine busy and hot. Use it only while
 something moves by itself, and stop it after.
 
-A model with hundreds of parts or more (CAD, KiCad) is slow, one draw call
-per part: after loading, and after measuring and finding parts by name,
-merge it with mergeByMaterial, and draw with sharpWhenStill (coarse pixels
-while the view moves, sharp when it stops):
+Your own three.js with hundreds of parts or more (CAD, KiCad) is slow, one
+draw call per part (<jd-scene> merges the meshes of a part by itself). After
+loading, and after measuring and finding parts by name, merge it with
+mergeByMaterial, and draw with sharpWhenStill (coarse pixels while the view
+moves, sharp when it stops):
 
     import { mergeByMaterial, sharpWhenStill } from '/_lib/three/fast.js';
     mergeByMaterial(model, { keep: m => moved.has(m) });  // one mesh per material; keep: meshes you still move, pick or recolour
@@ -364,20 +394,31 @@ the checked values, radios the chosen value or null, a select with multiple a
 list. Buttons count for nothing.
 
 The author can also comment on a live page, as on a PDF: on selected text, or
-on the element under the mouse. Give sections, figures and plots an id, and
-where it helps data-src="FILE:LINE" for the code that makes them; a comment
-is anchored to the nearest element with an id (or data-src), so it stays in
-place when you change the page. Without --json, --wait and --read print the
+on the element under the mouse. On a <jd-scene> the author points at the model
+and a comment is pinned to that point of its surface: the numbered marker
+stays on the model while it turns, and selecting the comment turns the view
+to it only when the point is out of sight. Give sections, figures, plots and
+models an id, and where it helps data-src="FILE:LINE" for the code that makes
+them; a comment is anchored to the nearest element with an id (or data-src),
+so it stays in place when you change the page. Without --json, --wait and --read print the
 open comments, then the answers:
 
        [2] #fig-psd  plots.py:120
            element: <the text inside the element, if any>
            comment: what the author says about it
 
+       [4] #bracket  part: housing  at (12.3, 4.5, 8) mm
+           surface: a point on the surface of a 3D model, normal (0, 0, 1)
+           comment: this edge is too sharp
+
        answers (round 1, 2026-11-25T10:31:07.512Z):
        {"variant": "B", "damping": true, "notes": "clamp must not scratch"}
 
-"text:" instead of "element:" is a selected text. A comment marked
+"text:" instead of "element:" is a selected text. A line with "part: ... at (x, y, z)"
+is a point on the surface of the model in the <jd-scene> with that id: the part
+by its name in the list and the point in the units of the model files (the
+unit is the one in the config); "normal" is the direction the surface faces.
+With --json it is anchor.scene = {part, point, normal, units}. A comment marked
 "(detached ...)" is on an element that is no longer in the page. A comment can
 be about a change you made to the page: a line "(a comment on a change: before
 it, the text was: ...)" gives the text as it was, and "removed:" stands for
@@ -1268,7 +1309,7 @@ REMOTE_ROUTES = ("/doc", "/api/info", "/api/annotations", "/api/done", "/api/rou
 def make_handler(tabs):
     class Handler(SimpleHTTPRequestHandler):
         extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".mjs": "text/javascript",
-                          ".js": "text/javascript", ".css": "text/css"}
+                          ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm"}
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(WEB), **kwargs)
@@ -2333,11 +2374,19 @@ def read(doc, as_json, only_open=False):
         print(f"{len(annots)} comment(s) in {comments_path(doc).name}")
 
 
+def scene_text(scene):
+    """Return the part and the point of a comment pinned to a model in a <jd-scene>: ``part: housing  at (12.3, 4.5, 8) mm``."""
+    point = ", ".join(f"{float(v):.5g}" for v in scene.get("point") or [])
+    unit = f" {scene['units']}" if scene.get("units") else ""
+    return f"part: {scene.get('part') or '?'}  at ({point}){unit}"
+
+
 def anchor_text(a):
-    """Return where a comment of a live page sits: the id, data-src and selector of its element."""
+    """Return where a comment of a live page sits: the id, data-src and selector of its element, and for a point of a model its part and point."""
     anchor = a.get("anchor") or {}
     parts = [f"#{anchor['id']}" if anchor.get("id") else "", anchor.get("src") or "",
-             "" if anchor.get("id") else anchor.get("selector") or ""]
+             "" if anchor.get("id") else anchor.get("selector") or "",
+             scene_text(anchor["scene"]) if anchor.get("scene") else ""]
     return "  ".join(p for p in parts if p) or "(no anchor)"
 
 
@@ -2362,6 +2411,10 @@ def read_live(doc, as_json, only_open=False):
         text = a.get("text") or "(no text inside)"
         if a.get("change") is not None and not a.get("text"):
             kind, text = "removed:", a["change"]
+        scene = (a.get("anchor") or {}).get("scene")
+        if scene:
+            normal = ", ".join(f"{float(v):.4g}" for v in scene.get("normal") or [])
+            kind, text = "surface:", f"a point on the surface of a 3D model, normal ({normal})"
         print(f"[{a['n']}] {where}\n    {kind:<8} {text}\n    comment: {a.get('comment') or '(none)'}")
         if a.get("change") is not None and a.get("text"):
             print(f"    (a comment on a change: before it, the text was: {a['change'] or '(nothing, it is new)'})")

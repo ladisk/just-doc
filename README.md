@@ -586,8 +586,11 @@ several parts):
 
 The element shows a bar above the view (view buttons iso, top, front, side,
 reset and fit; a section plane X, Y or Z with a slider and a flip; the size of
-the shown parts), the part list (checkbox, colour and opacity for each part
-and each group) and the view, as wide as the page. It follows light and dark,
+the shown parts) and the view, as wide as the page. The part list is a narrow
+column over the left edge of the view, one line per part (checkbox, colour,
+name; the opacity slider shows on the row under the mouse), groups as headers;
+a hidden part has a grey name. The Parts button hides the column; in a view
+narrower than 700 px it starts hidden. It follows light and dark,
 navigates as `touchpad()` does, draws only when something changed, merges the
 meshes of a part when there are many, and loads the parts in parallel; a part
 that fails shows its error in its row. Give it an `id`. The config is read once, so

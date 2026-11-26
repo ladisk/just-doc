@@ -636,7 +636,7 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   const infos = await S(`return sc.partInfo()`);
   check('an STL part and a STEP part load (parallel, in the list)', state === 'ready' && infos?.length === 2 && infos.every(p => p.status === 'ready')
     && infos[0].name === 'housing' && infos[1].name === 'cover' && infos[1].colour === '#e15759', JSON.stringify([state, infos]));
-  check('the part list, the view buttons and the section are above the view', !!(await S(`const k = [...sc.children].filter(c => c.localName !== 'script').map(c => c.className); return k[0].includes('controls') && k[1].includes('jd-parts') && k[2].includes('view') && sc.querySelectorAll('.jd-row').length === 2`)));
+  check('the view buttons and the section are above the view, the part list is a column inside it', !!(await S(`const k = [...sc.children].filter(c => c.localName !== 'script').map(c => c.className); return k[0].includes('controls') && k[1].includes('view') && sc.querySelector('.view > .jd-parts') && sc.querySelectorAll('.jd-row').length === 2`)));
   check('the canvas is drawn (not empty)', !!(await S(`const c = sc.querySelector('canvas'), g = document.createElement('canvas'); g.width = c.width; g.height = c.height;
     const x = g.getContext('2d'); x.drawImage(c, 0, 0); const px = x.getImageData(0, 0, g.width, g.height).data; const first = px.slice(0, 4).join();
     for (let i = 0; i < px.length; i += 4) if (px.slice(i, i + 4).join() !== first) return true; return false`)));

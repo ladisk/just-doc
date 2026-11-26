@@ -25,7 +25,8 @@
 // Tibor Barsi Palmic; the licence is the one of agent-canvas). What came with it: loading of
 // STL, STEP and GLB in parallel, the part list, the view buttons, the section plane with lightened
 // cut faces, the fit of the camera. What changed: a standalone element (no agent-canvas base, no
-// shadow DOM; it takes the colours of page.css), controls in a bar above a full width view, no
+// shadow DOM; it takes the colours of page.css), controls in a bar above a full width view, the part
+// list as a narrow column over the view (designed in the knauf-balancing session), no
 // damping, touchpad(), drawing only on a change at a sharp resolution when still (fast.js), parts
 // of many meshes merged by material, the background follows light and dark, and the marks of
 // agent-canvas (a Mark mode, a button, a stored list) are gone: the markers are the comments of
@@ -288,21 +289,28 @@ jd-scene .jd-sec[hidden] { display: none; }
 jd-scene .jd-sec input[type=range] { width: 140px; accent-color: var(--accent, #0969da); margin: 0; }
 jd-scene .jd-val { min-width: 8em; color: var(--muted, #656d76); font-variant-numeric: tabular-nums; }
 jd-scene .jd-size { margin-left: auto; color: var(--muted, #656d76); font-variant-numeric: tabular-nums; }
-jd-scene .jd-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 22px; margin: 0 0 8px; padding: 4px 14px;
-  font-size: 0.92em; background: var(--card, #f6f8fa); border: 1px solid var(--line, #d0d7de); border-radius: var(--radius, 8px); }
+/* the part list: one narrow column over the left edge of the view, one line per part */
+jd-scene .jd-parts { position: absolute; left: 8px; top: 8px; z-index: 2; width: 250px; max-height: calc(100% - 16px); overflow-y: auto;
+  padding: 4px 8px; font-size: 13px; background: color-mix(in srgb, var(--card, #f6f8fa) 92%, transparent);
+  border: 1px solid var(--line, #d0d7de); border-radius: var(--radius, 8px); box-shadow: 0 1px 4px rgb(0 0 0 / .08); }
 jd-scene .jd-parts[hidden] { display: none; }
-jd-scene .jd-row { display: grid; align-items: center; column-gap: 8px; min-height: 28px; grid-template-columns: 16px 16px minmax(0, 1fr) 84px;
-  border-bottom: 1px solid var(--line, #d0d7de); position: relative; }
-jd-scene .jd-row.grouped { padding-left: 18px; }
-jd-scene .jd-row.group { grid-column: 1 / -1; font-weight: 600; grid-template-columns: 16px 16px minmax(0, 1fr) 120px; }
+jd-scene .jd-row { display: grid; align-items: center; column-gap: 6px; min-height: 22px; grid-template-columns: 16px 14px minmax(0, 1fr) 54px;
+  position: relative; }
+jd-scene .jd-row.grouped { padding-left: 22px; }
+jd-scene .jd-row.group { font-weight: 600; margin-top: 4px; padding-top: 2px; border-top: 1px solid var(--line, #d0d7de); }
+jd-scene .jd-row.group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 jd-scene .jd-row input[type=checkbox] { margin: 0; width: 14px; height: 14px; }
-jd-scene .jd-row input[type=range] { width: 100%; margin: 0; accent-color: var(--accent, #0969da); }
+jd-scene .jd-row input[type=range] { width: 100%; margin: 0; accent-color: var(--accent, #0969da); visibility: hidden; }
+/* the opacity slider shows on the row under the mouse only, so the column reads as a list */
+jd-scene .jd-row:hover input[type=range], jd-scene .jd-row input[type=range]:focus { visibility: visible; }
 jd-scene .jd-chev { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0 !important; border: 0 !important; background: none !important; }
 jd-scene .jd-chev svg { fill: var(--muted, #656d76); display: block; }
 jd-scene .jd-chev[aria-expanded="false"] svg { transform: rotate(-90deg); }
 jd-scene .jd-sw { position: relative; display: block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line, #d0d7de); overflow: hidden; cursor: pointer; }
 jd-scene .jd-sw input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
-jd-scene .jd-name { min-width: 0; overflow-wrap: anywhere; line-height: 1.25; padding: 3px 0; }
+jd-scene .jd-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; padding: 1px 0; }
+/* a hidden part has a muted name; a partly shown group (indeterminate) does not */
+jd-scene .jd-row:has(> input[type=checkbox]:not(:checked):not(:indeterminate)) .jd-name { color: var(--muted, #656d76); }
 jd-scene .jd-name small { color: var(--muted, #656d76); font-weight: 400; }
 jd-scene .jd-row[data-status="pending"] .jd-name { color: var(--muted, #656d76); }
 jd-scene .jd-row[data-status="error"] .jd-name { color: var(--bad, #cf222e); }
@@ -399,11 +407,16 @@ class JdScene extends HTMLElement {
   _build(config) {
     this.canvas = h('canvas');
     this.status = h('div', { class: 'jd-status', role: 'status', hidden: true });
-    this.viewEl = h('div', { class: 'view' }, this.canvas, this.status);
+    this.listEl = h('div', { class: 'jd-parts', role: 'group', 'aria-label': 'Parts' });
+    this.viewEl = h('div', { class: 'view' }, this.canvas, this.status, this.listEl);
     if (config.height) { this.viewEl.style.height = config.height + 'px'; this.viewEl.style.minHeight = '0'; }
     this.bar = this._buildBar();
-    this.listEl = h('div', { class: 'jd-parts', role: 'group', 'aria-label': 'Parts' });
-    this.append(this.bar, this.listEl, this.viewEl);
+    this.append(this.bar, this.viewEl);
+    // in a narrow view the column would cover much of the model: it starts closed there
+    if (this.viewEl.clientWidth && this.viewEl.clientWidth < 700) {
+      this.listEl.hidden = true;
+      this.partsButton.setAttribute('aria-pressed', 'false');
+    }
 
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, preserveDrawingBuffer: true });
     this.scene = new THREE.Scene();
@@ -888,6 +901,9 @@ class JdScene extends HTMLElement {
   }
 
   pick(clientX, clientY) {
+    // over the part list or the status, not over the model
+    const top = document.elementFromPoint(clientX, clientY);
+    if (top && top !== this.canvas) return null;
     const ray = this._rayAt(clientX, clientY);
     const hit = ray && this._hits(ray)[0];
     if (!hit || !hit.face) return null;

@@ -369,6 +369,32 @@ Plotly.newPlot('plot2', [{y: window.DATA}], {paper_bgcolor: '#ffeedd', font: {co
   const far = await until(() => { const r = spawnSync(venv, [rdoc, '--live', '--read', '--json'], { encoding: 'utf8' });
     return r.status === 0 && parsed(r.stdout)?.answers?.answers?.note === 'from afar' && parsed(r.stdout); }, 8000);
   check('Ctrl+Enter in a remote page saves its answers there', far?.answers?.answers?.note === 'from afar', JSON.stringify(far));
+  // a PDF of "another machine": shown by the viewer here, its requests go on there, Ctrl+Enter ends its --wait
+  const rpdf = join(site, 'remote.pdf');
+  spawnSync(join(repo, '.venv', 'bin', 'python'), ['-c', 'import sys; from pypdf import PdfWriter; w = PdfWriter(); w.add_blank_page(300, 200); w.write(sys.argv[1])', rpdf]);
+  const pdfWaiter = spawn(venv, [rpdf, '--wait', '--json', '--no-window', '--port', String(RP)],
+    { env: { ...env('t6'), WAYLAND_DISPLAY: '', DISPLAY: '' }, stdio: ['ignore', 'pipe', 'ignore'] });
+  procs.push(pdfWaiter);
+  let waited = ''; pdfWaiter.stdout.on('data', c => waited += c);
+  let ended = false; pdfWaiter.on('exit', () => ended = true);
+  await until(async () => spawnSync(venv, ['--hc-terminal', 't6', '--print', '--port', String(RP)], { encoding: 'utf8' }).status === 0, 15000);
+  h = hcm('t6', 'fake');
+  check('--hc-machine shows a PDF of the other machine', h.status === 0, h.stderr || h.stdout);
+  const ptab = (await (await fetch(base + '/api/tabs')).json()).tabs.find(t => t.remote === 'fake' && t.name === 'fake: remote.pdf');
+  check('the remote PDF tab is not live and has no src', !!ptab && ptab.live === false && !ptab.src, JSON.stringify(ptab));
+  const pq = `?d=${ptab?.id}`;
+  r = await fetch(base + '/doc' + pq);
+  check('/doc of the remote PDF comes from the other machine', r.status === 200 && (await r.text()).startsWith('%PDF'), String(r.status));
+  r = await fetch(base + '/api/info' + pq);
+  check('/api/info of the remote PDF names it', (await r.json()).name === 'remote.pdf');
+  r = await fetch(base + '/api/annotations' + pq, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ annots: [{ id: 'a1', page: 1, text: 'x', comment: 'pdf note', rects: [[10, 10, 50, 20]], color: 'yellow', ts: 1 }] }) });
+  check('a comment on the remote PDF is accepted', r.status === 200, String(r.status));
+  const pc = spawnSync(venv, [rpdf, '--read', '--json', '--port', String(RP)], { encoding: 'utf8' });
+  check('the comment on the remote PDF is saved on its machine', pc.stdout.includes('"comment": "pdf note"'), pc.stdout + pc.stderr);
+  r = await fetch(base + '/api/done' + pq, { method: 'POST' });
+  check('Ctrl+Enter on the remote PDF reaches its --wait', r.status === 200 && !!(await until(async () => ended, 10000)) && /pdf note/.test(waited), `${r.status} ${waited}`);
+  check('the remote PDF opens in the viewer here', !!(await top(`const f=[...document.querySelectorAll('iframe')].find(f=>f.src.includes('view?d=${ptab?.id}')); return !!f`)));
   h = hcm('t77', 'fake');
   check('--hc-machine for an unknown terminal fails cleanly', h.status === 1 && /no open document/.test(h.stderr) && !h.stdout, `${h.status} ${h.stderr}`);
   check('no uncaught exceptions', excs.length === 0, excs[0]);

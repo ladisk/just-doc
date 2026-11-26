@@ -31,8 +31,9 @@ Usage
                                  that was opened or changed last from the hc
                                  terminal t12 (HC_TERMINAL_ID of the opening shell)
     just-doc --hc-terminal t12 --hc-machine work2
-                                 the same for a live page that an agent on the
-                                 machine work2 opened there, shown through ssh
+                                 the same for a document (PDF or live page) that
+                                 a command on the machine work2 opened there,
+                                 shown through ssh
     just-doc --guide             print how a coding assistant uses the three
                                  commands above to review a document with you
 """
@@ -805,7 +806,7 @@ class Tabs:
         self.live = set()    # ids of the HTML pages that are shown live, not as a PDF
         self.terms = {}      # id -> the hc terminal (HC_TERMINAL_ID) the document was opened from
         self.opened_at = {}  # id -> when the document was opened last (time.time)
-        self.remote = {}     # id -> a live page of a just-doc on another machine, see open_remote
+        self.remote = {}     # id -> a document (live page or PDF) of a just-doc on another machine, see open_remote
         self.forwards = Forwards()
         self.quit = False    # set by the q key: the windows close and just-doc stops
         self.opening = 0     # until when (time.monotonic) a window that this just-doc opened is still starting
@@ -873,10 +874,12 @@ class Tabs:
                 self.changed.notify_all()
 
     def open_remote(self, info):
-        """Open a live page of another machine as a tab and show it; return its id.
+        """Open a document of another machine as a tab and show it; return its id.
 
         ``info`` has the machine, its ssh target, the port of the just-doc there,
-        and the id, name, path and file time of the page in that just-doc.
+        and the id, name, path and file time of the document in that just-doc, and
+        ``live`` (a live page, or a PDF; missing: a live page, as older versions
+        showed only those).
         """
         key = hashlib.sha1(f"{info['machine']}\0{info['id']}".encode()).hexdigest()[:10]
         with self.changed:
@@ -888,14 +891,23 @@ class Tabs:
             self.changed.notify_all()
         return key
 
-    def remote_file(self, key, stamp, rev):
-        """Note the file time of a remote page and the count of changes of its comments there.
+    def remote_file(self, key, stamp, rev, wait=None):
+        """Note the file time of a remote document and the count of changes of its comments there.
 
-        A new file time makes the window load the page again, a new count its comments.
+        A new file time makes the window load the document again, a new count its comments.
+        ``wait`` is the (waiting, waits, pending) of its tab there, shown on a PDF.
         """
         with self.changed:
             info = self.remote.get(key)
-            if info is not None and (info.get("file"), info.get("rev", 0)) != (stamp, rev):
+            if info is None:
+                return
+            if wait is not None and not info.get("live", True):
+                old = (info.get("waiting"), info.get("waits"), info.get("pending"))
+                if old != wait:
+                    info["waiting"], info["waits"], info["pending"] = wait
+                    self.version += 1
+                    self.changed.notify_all()
+            if (info.get("file"), info.get("rev", 0)) != (stamp, rev):
                 info["file"], info["rev"] = stamp, rev
                 self.version += 1
                 self.changed.notify_all()
@@ -1007,11 +1019,18 @@ class Tabs:
         for key, doc in self.docs.items():
             info = self.remote.get(key)
             if info:
-                # served by the just-doc of that machine, through an ssh forward and /remote/
-                tabs.append({"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
-                             "live": True, "remote": info["machine"], "rid": info["id"], "rev": info.get("rev", 0), "file": info.get("file"),
-                             "src": f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}",
-                             "waiting": False, "pending": False})
+                # served by the just-doc of that machine, through an ssh forward
+                live = info.get("live", True)
+                tab = {"id": key, "name": f"{info['machine']}: {info['name']}", "path": f"{info['machine']}:{info['path']}",
+                       "live": live, "remote": info["machine"], "rid": info["id"], "rev": info.get("rev", 0), "file": info.get("file"),
+                       "waiting": False, "pending": False}
+                if live:
+                    tab["src"] = f"remote/{key}/live/{info['id']}/{urllib.parse.quote(info['name'])}"
+                else:
+                    # the viewer here; its requests for this id go on to the other machine
+                    tab.update({"waiting": bool(info.get("waiting")), "waits": info.get("waits", 0),
+                                "pending": bool(info.get("pending"))})
+                tabs.append(tab)
                 continue
             try:
                 changed = doc.stat().st_mtime
@@ -1149,7 +1168,7 @@ class Forwards:
 
 
 def watch_remote(tabs):
-    """Look every two seconds whether a remote page changed, while a window is open; close idle forwards."""
+    """Look every two seconds whether a remote document changed, while a window is open; close idle forwards."""
     while True:
         time.sleep(2)
         tabs.forwards.reap()
@@ -1162,7 +1181,8 @@ def watch_remote(tabs):
                 tab = next(t for t in state["tabs"] if t["id"] == info["id"])
             except Exception:  # noqa: BLE001
                 continue
-            tabs.remote_file(key, tab["file"], tab.get("rev", 0))
+            tabs.remote_file(key, tab["file"], tab.get("rev", 0),
+                             (bool(tab.get("waiting")), tab.get("waits", 0), bool(tab.get("pending"))))
 
 
 @functools.lru_cache(maxsize=1)
@@ -1170,6 +1190,11 @@ def plotly_bundle():
     """Return Plotly followed by plotly-theme.js, as /_lib/plotly.min.js serves it; the files stay as they are."""
     lib = WEB / "_lib"
     return (lib / "plotly.min.js").read_bytes() + b"\n" + (lib / "plotly-theme.js").read_bytes()
+
+
+# the requests of the viewer that a PDF of another machine answers there
+REMOTE_ROUTES = ("/doc", "/api/info", "/api/annotations", "/api/done", "/api/rounds", "/api/before",
+                 "/api/export", "/api/pdf", "/api/reply")
 
 
 def make_handler(tabs):
@@ -1256,13 +1281,16 @@ def make_handler(tabs):
             """
             url = urllib.parse.urlsplit(self.path)
             _, _, key, rest = (url.path.split("/", 3) + ["", "", "", ""])[:4]
-            info = tabs.remote.get(key)
+            self._pass(tabs.remote.get(key), rest, url.query, body)
+
+        def _pass(self, info, rest, query, body=None):
+            """Ask the just-doc of the machine of ``info`` for ``/<rest>?<query>`` and send its answer on."""
             if info is None:
                 self._json(404, {"error": "not found"})
                 return
             try:
                 local = tabs.forwards.port(info["target"], info["port"])
-                there = f"http://127.0.0.1:{local}/{rest}" + (f"?{url.query}" if url.query else "")
+                there = f"http://127.0.0.1:{local}/{rest}" + (f"?{query}" if query else "")
                 req = urllib.request.Request(there, data=body, headers={} if body is None else
                                              {"Content-Type": self.headers.get("Content-Type", "")})
                 with urllib.request.urlopen(req, timeout=60) as resp:
@@ -1274,8 +1302,21 @@ def make_handler(tabs):
                 return
             self._send(code, body, ctype or "application/octet-stream")
 
+        def _remote_pdf(self, route, key, body=None):
+            """Pass a request for a PDF of another machine (``?d=`` is its tab here) on there; False if it is not one."""
+            info = tabs.remote.get(key)
+            if info is None or info.get("live", True) or route not in REMOTE_ROUTES:
+                return False
+            query = urllib.parse.urlsplit(self.path).query
+            query = urllib.parse.urlencode([(k, info["id"] if k == "d" else v)
+                                            for k, v in urllib.parse.parse_qsl(query, keep_blank_values=True)])
+            self._pass(info, route.lstrip("/"), query, body)
+            return True
+
         def do_GET(self):
             route, key, doc = self._route()
+            if self._remote_pdf(route, key):
+                return
             if route.startswith("/live/"):
                 self._live(route)
             elif route.startswith("/remote/"):
@@ -1345,6 +1386,10 @@ def make_handler(tabs):
 
         def do_POST(self):
             route, key, doc = self._route()
+            if route in REMOTE_ROUTES and key in tabs.remote and not tabs.remote[key].get("live", True):
+                # comments, Ctrl+Enter and export of a PDF of another machine are kept there, where its agent runs
+                self._remote_pdf(route, key, self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+                return
             if route.startswith("/remote/"):
                 # the answers of a live page of another machine are kept there, where its agent runs
                 self._remote(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
@@ -1399,13 +1444,14 @@ def make_handler(tabs):
                 self._json(200, {"ok": True, "name": tabs.docs[key].name, "windows": tabs.shown()})
                 return
             if route == "/api/remote":
-                # a live page of another machine, from --hc-machine; JSON only, as above
+                # a document of another machine, from --hc-machine; JSON only, as above
                 if self.headers.get("Content-Type") != "application/json":
                     self._json(400, {"error": "JSON expected"})
                     return
                 try:
                     obj = self._body()
                     info = {k: obj[k] for k in ("machine", "port", "id", "name", "path", "file")}
+                    info["live"] = bool(obj.get("live", True))
                     # the ssh target comes from the machine name here, never from the request
                     info["target"], info["port"] = machine_target(str(info["machine"]))[0], int(info["port"])
                     tabs.forwards.port(info["target"], info["port"])
@@ -2001,9 +2047,9 @@ def local_just_doc(port):
 
 
 def hc_remote(terminal, machine, port, window=True):
-    """Show the live page that the hc terminal ``terminal`` of the machine ``machine`` opened or changed last.
+    """Show the document (live page or PDF) that the hc terminal ``terminal`` of the machine ``machine`` opened or changed last.
 
-    The just-doc there is asked over ssh (``--hc-terminal ID --print``); its page
+    The just-doc there is asked over ssh (``--hc-terminal ID --print``); its document
     comes through an ssh forward into a tab of the window here.
     """
     try:
@@ -2023,11 +2069,9 @@ def hc_remote(terminal, machine, port, window=True):
         got = json.loads(res.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         fail(f"no open document from terminal {terminal} on {machine}")
-    if not got.get("live"):
-        fail(f"{got['name']} on {machine} is not a live page; only live pages (--live) of another machine are shown")
     url = local_just_doc(port)
     info = {"machine": machine, "port": got["port"], "id": got["id"], "name": got["name"],
-            "path": got["path"], "file": got.get("file")}
+            "path": got["path"], "file": got.get("file"), "live": bool(got.get("live"))}
     try:
         state = ask(url + "api/remote", info, timeout=90)
     except (OSError, RuntimeError) as exc:
@@ -2270,7 +2314,7 @@ def main():
                     help="bring the window to the front with the document that was opened or changed last "
                          "from this hc terminal (the HC_TERMINAL_ID of the shell that opened it)")
     ap.add_argument("--hc-machine", metavar="NAME", default="",
-                    help="with --hc-terminal: the hc machine of the terminal (empty: this one); its live page is "
+                    help="with --hc-terminal: the hc machine of the terminal (empty: this one); its document (PDF or live page) is "
                          "shown here through ssh")
     ap.add_argument("--print", dest="as_print", action="store_true",
                     help="with --hc-terminal: only print where the document is, as JSON (exit status 1: none)")

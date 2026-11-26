@@ -772,11 +772,14 @@ just-doc --hc-terminal t12 --hc-machine work2
 
 asks `work2` over ssh (`just-doc --hc-terminal t12 --print`), forwards a local
 port to the just-doc there (`ssh -N -L`, also through an open shared connection
-of the host), and shows the page as a tab named `work2: page.html`. The page,
+of the host), and shows the document as a tab named `work2: page.html`. The page,
 its relative files and its changes come through the forward; `/_lib/` comes
 from the just-doc here. The forward closes ten minutes after the tab was
-closed or the window was closed, and when just-doc stops. Only live pages of
-another machine are shown. With `--hc-machine ""` the terminal is one of this
+closed or the window was closed, and when just-doc stops. A PDF (also one
+made from markdown) of the other machine is shown in the viewer here, as a tab
+named `work2: deck.pdf`: the PDF, its comments, the export and Ctrl+Enter go
+to the just-doc there, so a `just-doc deck.pdf --wait` on `work2` gets the
+comments. The just-doc there needs no newer version. With `--hc-machine ""` the terminal is one of this
 machine, so a key binding can always pass `$HC_FOCUSED_MACHINE`:
 
 ```bash
